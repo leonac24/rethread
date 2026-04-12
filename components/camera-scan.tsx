@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import type { ScanResult } from '@/types/garment';
 
@@ -9,11 +9,6 @@ type ScanResponse = {
   id: string;
   text: string;
   result: ScanResult;
-};
-
-type ScannedItem = {
-  id: string;
-  fileName: string;
 };
 
 function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
@@ -34,14 +29,12 @@ function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export function CameraScan() {
+  const router = useRouter();
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [staged, setStaged] = useState<File[]>([]);
-  const [scanned, setScanned] = useState<ScannedItem[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-
-  const isLoading = progress !== null;
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -57,63 +50,48 @@ export function CameraScan() {
   async function handleScan() {
     if (!staged.length) return;
 
-    setErrors([]);
-    setProgress({ done: 0, total: staged.length });
+    setError('');
+    setIsLoading(true);
 
-    const coords = await getCurrentCoords();
-    console.log('[scan] geolocation result:', coords);
+    try {
+      const coords = await getCurrentCoords();
+      console.log('[scan] geolocation result:', coords);
 
-    let done = 0;
-
-    const settled = await Promise.allSettled(
-      staged.map(async (file) => {
-        const formData = new FormData();
+      const formData = new FormData();
+      for (const file of staged) {
         formData.append('photo', file);
+      }
+      if (coords) {
+        formData.append('lat', String(coords.lat));
+        formData.append('lng', String(coords.lng));
+      }
 
-        if (coords) {
-          formData.append('lat', String(coords.lat));
-          formData.append('lng', String(coords.lng));
-        }
+      const response = await fetch('/api/scan', {
+        method: 'POST',
+        body: formData,
+      });
 
-        const response = await fetch('/api/scan', {
-          method: 'POST',
-          body: formData,
-        });
+      const payload = (await response.json()) as Partial<ScanResponse> & {
+        error?: string;
+      };
 
-        const payload = (await response.json()) as Partial<ScanResponse> & {
-          error?: string;
-        };
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Scan failed.');
+      }
 
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Scan failed.');
-        }
-
-        if (payload.id && payload.result && typeof payload.text === 'string') {
-          sessionStorage.setItem(
-            `scan:${payload.id}`,
-            JSON.stringify({ text: payload.text, result: payload.result }),
-          );
-        }
-
-        done += 1;
-        setProgress({ done, total: staged.length });
-
-        return { id: payload.id!, fileName: file.name };
-      }),
-    );
-
-    const successes = settled
-      .filter((r): r is PromiseFulfilledResult<ScannedItem> => r.status === 'fulfilled')
-      .map((r) => r.value);
-
-    const failures = settled
-      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-      .map((r) => (r.reason instanceof Error ? r.reason.message : 'Scan failed.'));
-
-    setProgress(null);
-    setErrors(failures);
-    setStaged([]);
-    setScanned((prev) => [...prev, ...successes]);
+      if (payload.id && payload.result && typeof payload.text === 'string') {
+        sessionStorage.setItem(
+          `scan:${payload.id}`,
+          JSON.stringify({ text: payload.text, result: payload.result }),
+        );
+        router.push(`/result/${payload.id}`);
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Scan failed.');
+    } finally {
+      setIsLoading(false);
+      setStaged([]);
+    }
   }
 
   function openCamera() {
@@ -127,6 +105,10 @@ export function CameraScan() {
   return (
     <main className="min-h-screen bg-bg px-4 py-6 flex items-start justify-center">
       <section className="w-full max-w-md rounded-lg border border-rule bg-surface p-4 shadow-sm sm:p-5">
+        <p className="mb-4 text-[13px] leading-[20px] text-ink-muted">
+          Upload images of every tag attached to your clothing item, including brand, size, and care labels - the more tags the better the results! If you allow location access, we can also provide insights on nearby sustainable clothing recycling options.
+        </p>
+
         <div className="grid grid-cols-1 gap-3">
           <button
             type="button"
@@ -195,35 +177,18 @@ export function CameraScan() {
               disabled={isLoading}
               className="mt-1 w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium disabled:opacity-60"
             >
-              {isLoading
-                ? `Scanning ${progress.done} of ${progress.total}...`
-                : `Scan ${staged.length} tag${staged.length === 1 ? '' : 's'}`}
+              {isLoading ? 'Scanning...' : `Scan ${staged.length} tag${staged.length === 1 ? '' : 's'}`}
             </button>
           </div>
         )}
 
-        {(scanned.length > 0 || errors.length > 0) && (
-          <div className="mt-4 space-y-2">
-            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">Results</p>
-            {errors.map((e, i) => (
-              <p key={i} className="text-[14px] text-danger">{e}</p>
-            ))}
-            {scanned.map((item) => (
-              <Link
-                key={item.id}
-                href={`/result/${item.id}`}
-                className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 text-[14px] text-ink hover:bg-surface-sunk"
-              >
-                <span className="truncate">{item.fileName}</span>
-                <span className="ml-3 shrink-0 text-ink-muted">View →</span>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {staged.length === 0 && scanned.length === 0 && !isLoading && (
+        {staged.length === 0 && !isLoading && (
           <div className="mt-4 min-h-24 rounded-md border border-rule bg-bg p-4">
-            <p className="text-[14px] text-ink-muted">Upload images to get started.</p>
+            {error ? (
+              <p className="text-[14px] text-danger">{error}</p>
+            ) : (
+              <p className="text-[14px] text-ink-muted">Upload images to get started.</p>
+            )}
           </div>
         )}
       </section>

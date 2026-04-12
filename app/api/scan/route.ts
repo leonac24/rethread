@@ -32,19 +32,26 @@ function fallbackRoutes(): [RouteOption, RouteOption, RouteOption] {
 
 export async function POST(request: Request) {
   const formData = await request.formData();
-  const file = formData.get('photo');
+  const files = formData.getAll('photo');
 
-  if (!(file instanceof File)) {
+  if (!files.length) {
     return Response.json({ error: 'Missing image file in field "photo".' }, { status: 400 });
   }
 
-  if (!file.type.startsWith('image/')) {
-    return Response.json({ error: 'Uploaded file must be an image.' }, { status: 400 });
+  for (const file of files) {
+    if (!(file instanceof File) || !file.type.startsWith('image/')) {
+      return Response.json({ error: 'All uploaded files must be images.' }, { status: 400 });
+    }
   }
 
-  const bytes = await file.arrayBuffer();
-  const image = Buffer.from(bytes);
-  const text = await readClothingLabelText(image);
+  const texts = await Promise.all(
+    (files as File[]).map(async (file) => {
+      const image = Buffer.from(await file.arrayBuffer());
+      return readClothingLabelText(image);
+    }),
+  );
+
+  const text = texts.join('\n');
   const parsed = parseClothingLabelText(text);
 
   const garment: ScanResult['garment'] = {
