@@ -1,7 +1,7 @@
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import type { ScanResult } from '@/types/garment';
 
@@ -9,6 +9,11 @@ type ScanResponse = {
   id: string;
   text: string;
   result: ScanResult;
+};
+
+type ScannedItem = {
+  id: string;
+  fileName: string;
 };
 
 function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
@@ -29,63 +34,86 @@ function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export function CameraScan() {
-  const router = useRouter();
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const [text, setText] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [staged, setStaged] = useState<File[]>([]);
+  const [scanned, setScanned] = useState<ScannedItem[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
-  async function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  const isLoading = progress !== null;
 
-    if (!file) {
-      return;
-    }
+  function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+    setStaged((prev) => [...prev, ...files]);
+    event.target.value = '';
+  }
 
-    setError('');
-    setText('');
-    setIsLoading(true);
+  function removeStaged(index: number) {
+    setStaged((prev) => prev.filter((_, i) => i !== index));
+  }
 
-    try {
-      const formData = new FormData();
-      formData.append('photo', file);
+  async function handleScan() {
+    if (!staged.length) return;
 
-      const coords = await getCurrentCoords();
-      console.log('[scan] geolocation result:', coords);
-      if (coords) {
-        formData.append('lat', String(coords.lat));
-        formData.append('lng', String(coords.lng));
-      }
+    setErrors([]);
+    setProgress({ done: 0, total: staged.length });
 
-      const response = await fetch('/api/scan', {
-        method: 'POST',
-        body: formData,
-      });
+    const coords = await getCurrentCoords();
+    console.log('[scan] geolocation result:', coords);
 
-      const payload = (await response.json()) as Partial<ScanResponse> & {
-        error?: string;
-      };
+    let done = 0;
 
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'Scan failed.');
-      }
+    const settled = await Promise.allSettled(
+      staged.map(async (file) => {
+        const formData = new FormData();
+        formData.append('photo', file);
 
-      setText(payload.text ?? '');
+        if (coords) {
+          formData.append('lat', String(coords.lat));
+          formData.append('lng', String(coords.lng));
+        }
 
-      if (payload.id && payload.result && typeof payload.text === 'string') {
-        sessionStorage.setItem(
-          `scan:${payload.id}`,
-          JSON.stringify({ text: payload.text, result: payload.result }),
-        );
-        router.push(`/result/${payload.id}`);
-      }
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Scan failed.');
-    } finally {
-      setIsLoading(false);
-      event.target.value = '';
-    }
+        const response = await fetch('/api/scan', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const payload = (await response.json()) as Partial<ScanResponse> & {
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? 'Scan failed.');
+        }
+
+        if (payload.id && payload.result && typeof payload.text === 'string') {
+          sessionStorage.setItem(
+            `scan:${payload.id}`,
+            JSON.stringify({ text: payload.text, result: payload.result }),
+          );
+        }
+
+        done += 1;
+        setProgress({ done, total: staged.length });
+
+        return { id: payload.id!, fileName: file.name };
+      }),
+    );
+
+    const successes = settled
+      .filter((r): r is PromiseFulfilledResult<ScannedItem> => r.status === 'fulfilled')
+      .map((r) => r.value);
+
+    const failures = settled
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .map((r) => (r.reason instanceof Error ? r.reason.message : 'Scan failed.'));
+
+    setProgress(null);
+    setErrors(failures);
+    setStaged([]);
+    setScanned((prev) => [...prev, ...successes]);
   }
 
   function openCamera() {
@@ -106,9 +134,7 @@ export function CameraScan() {
             disabled={isLoading}
             className="rounded-md border border-rule bg-bg px-4 py-5 text-left transition-colors hover:bg-surface-sunk disabled:opacity-60"
           >
-            <span className="block text-[14px] font-medium text-ink">
-              {isLoading ? 'Scanning...' : 'Open camera'}
-            </span>
+            <span className="block text-[14px] font-medium text-ink">Open camera</span>
           </button>
 
           <button
@@ -117,9 +143,7 @@ export function CameraScan() {
             disabled={isLoading}
             className="rounded-md border border-rule bg-bg px-4 py-5 text-left transition-colors hover:bg-surface-sunk disabled:opacity-60"
           >
-            <span className="block text-[14px] font-medium text-ink">
-              {isLoading ? 'Scanning...' : 'Upload image'}
-            </span>
+            <span className="block text-[14px] font-medium text-ink">Upload images</span>
           </button>
         </div>
 
@@ -128,7 +152,7 @@ export function CameraScan() {
           type="file"
           accept="image/*"
           capture="environment"
-          onChange={handleChange}
+          onChange={handleFilesSelected}
           className="sr-only"
           aria-label="Capture a tag photo"
         />
@@ -137,24 +161,71 @@ export function CameraScan() {
           ref={uploadInputRef}
           type="file"
           accept="image/*"
-          onChange={handleChange}
+          multiple
+          onChange={handleFilesSelected}
           className="sr-only"
-          aria-label="Upload a tag photo"
+          aria-label="Upload tag photos"
         />
 
-        <div className="mt-4 min-h-24 rounded-md border border-rule bg-bg p-4">
-          {isLoading ? (
-            <p className="text-[14px] text-ink-muted">Uploading and reading text...</p>
-          ) : error ? (
-            <p className="text-[14px] text-danger">{error}</p>
-          ) : text ? (
-            <pre className="whitespace-pre-wrap text-[14px] leading-[22px] text-ink">
-              {text}
-            </pre>
-          ) : (
-            <p className="text-[14px] text-ink-muted">Your OCR result will appear here.</p>
-          )}
-        </div>
+        {staged.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">
+              Queued ({staged.length})
+            </p>
+            {staged.map((file, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2"
+              >
+                <span className="truncate text-[14px] text-ink">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeStaged(i)}
+                  disabled={isLoading}
+                  className="ml-3 shrink-0 text-[13px] text-ink-muted hover:text-danger disabled:opacity-40"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={handleScan}
+              disabled={isLoading}
+              className="mt-1 w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium disabled:opacity-60"
+            >
+              {isLoading
+                ? `Scanning ${progress.done} of ${progress.total}...`
+                : `Scan ${staged.length} tag${staged.length === 1 ? '' : 's'}`}
+            </button>
+          </div>
+        )}
+
+        {(scanned.length > 0 || errors.length > 0) && (
+          <div className="mt-4 space-y-2">
+            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">Results</p>
+            {errors.map((e, i) => (
+              <p key={i} className="text-[14px] text-danger">{e}</p>
+            ))}
+            {scanned.map((item) => (
+              <Link
+                key={item.id}
+                href={`/result/${item.id}`}
+                className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 text-[14px] text-ink hover:bg-surface-sunk"
+              >
+                <span className="truncate">{item.fileName}</span>
+                <span className="ml-3 shrink-0 text-ink-muted">View →</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {staged.length === 0 && scanned.length === 0 && !isLoading && (
+          <div className="mt-4 min-h-24 rounded-md border border-rule bg-bg p-4">
+            <p className="text-[14px] text-ink-muted">Upload images to get started.</p>
+          </div>
+        )}
       </section>
     </main>
   );
