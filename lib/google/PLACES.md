@@ -22,7 +22,7 @@ findRoutes(
 - Each request sends a `locationRestriction` circle centered on the user with a 5 km radius, `maxResultCount: 1`, and `rankPreference: 'DISTANCE'` — `locationRestriction` is required for distance ranking to apply.
 - Response fields are pinned via `X-Goog-FieldMask` to displayName, formattedAddress, location, rating, types, and weekday opening descriptions; the description for today's weekday is picked off the list (Places indexes 0 = Monday).
 - Distance is recomputed locally from the returned lat/lng with the haversine formula and rounded to one decimal kilometre — the API is only trusted for ranking.
-- `accepts_item` cross-checks the place's reported `types` against a small whitelist picked from the category. Shoe-ish categories (regex `/shoe|sneaker|boot|sandal|heel|loafer|slipper|pump|oxford|clog/`) match `shoe_store`/`clothing_store`/`department_store`/`shopping_mall`; everything else swaps `shoe_store` for `tailor`. Donation routes return `null` (place types rarely distinguish donation centers); a null category returns `true`.
+- `accepts_item` cross-checks the place's reported `types` against a small whitelist picked from the category. Shoe-ish categories (regex `/shoe|sneaker|boot|sandal|heel|loafer|slipper|pump|oxford|clog/`) match `shoe_store`/`clothing_store`/`department_store`/`shopping_mall`; everything else swaps `shoe_store` for `tailor`. A positive match returns `true`; anything else returns `null` ("don't know"), since small tailors and donation centers frequently expose only generic `establishment` / `point_of_interest` types. Only a null category returns `true` unconditionally.
 
 ## Environment
 

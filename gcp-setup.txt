@@ -1,0 +1,157 @@
+================================================================================
+PROMPT FOR CLAUDE BROWSER EXTENSION — RETHREAD GCP SETUP
+================================================================================
+
+Paste everything below the line into the Claude browser extension while you
+have a Google Cloud Console tab open and are signed in as the account that
+will own the project.
+
+--------------------------------------------------------------------------------
+
+You are helping me stand up all the Google Cloud resources needed for the
+"Rethread" Next.js project. Do this step by step, pausing at each CHECKPOINT
+so I can confirm before you proceed. Never paste secrets (API keys, service
+account JSON) back into the chat — report where they are instead.
+
+PROJECT CONTEXT
+- App is a Next.js 15 server app on Vercel.
+- It uses five Google products: Maps/Places, Vision, Document AI, BigQuery,
+  and Gemini. Gemini lives in Google AI Studio and is keyed separately — the
+  other four all live in this same GCP project.
+- The app reads all credentials from env vars. The target .env.local shape is:
+    GOOGLE_APPLICATION_CREDENTIALS_JSON=<inline service account JSON>
+    GEMINI_API_KEY=<from AI Studio>
+    GOOGLE_MAPS_API_KEY=<restricted to Places API (New)>
+    DOCAI_PROCESSOR_ID=<full resource name, not just the short id>
+    BIGQUERY_DATASET=rethread.brand_ratings
+
+MINIMUM VIABLE PATH (for testing the /api/test-routes endpoint first)
+If I say "just the route test," only do Step 1, Step 2a, and Step 3. Stop
+there and give me the Maps API key.
+
+================================================================================
+STEP 1 — PROJECT
+================================================================================
+1. Go to https://console.cloud.google.com/projectcreate
+2. Create a new project named "rethread" (or ask me first if I already have
+   one I want to reuse). Leave org/folder at defaults unless I say otherwise.
+3. Wait for the project to finish provisioning, then make sure the project
+   picker in the top bar is set to "rethread".
+
+CHECKPOINT: confirm the project ID with me before continuing.
+
+================================================================================
+STEP 2 — ENABLE APIS
+================================================================================
+All API enablement happens under "APIs & Services → Library". Enable these,
+one at a time, waiting for each to show "API enabled" before moving on:
+
+  2a. Places API (New)            ← REQUIRED for /api/test-routes test
+  2b. Cloud Vision API
+  2c. Cloud Document AI API
+  2d. BigQuery API
+
+Do NOT enable the legacy "Places API" — the app calls the v1 endpoint and
+the old one will not work. If you see both, pick the one labeled "(New)".
+
+CHECKPOINT: list back the four APIs with their status.
+
+================================================================================
+STEP 3 — MAPS/PLACES API KEY
+================================================================================
+1. Go to "APIs & Services → Credentials".
+2. Click "Create credentials → API key". Copy the key value.
+3. Click the new key's name to edit it. Rename it "rethread-maps".
+4. Under "API restrictions" → "Restrict key" → select "Places API (New)".
+5. Under "Application restrictions" leave as "None" for local dev. (I'll
+   lock it down to Vercel's egress before production.)
+6. Save.
+
+Do NOT paste the key into chat. Tell me:
+  - the key's display name
+  - the last 4 characters of the key
+  - which restrictions you applied
+Then tell me to copy it from the Credentials page into GOOGLE_MAPS_API_KEY
+in my .env.local.
+
+CHECKPOINT: wait for me to say "got it" before continuing past this step.
+IF I SAID "just the route test", STOP HERE.
+
+================================================================================
+STEP 4 — SERVICE ACCOUNT (Vision, Document AI, BigQuery)
+================================================================================
+1. Go to "IAM & Admin → Service Accounts → Create service account".
+2. Name: "rethread-backend". Description: "Server-side client for Vision,
+   Document AI, BigQuery." Click Create.
+3. Grant these roles, one per row:
+      - Cloud Vision API User        (roles/visionai.user or Vision equivalent)
+      - Document AI API User         (roles/documentai.apiUser)
+      - BigQuery Data Viewer         (roles/bigquery.dataViewer)
+      - BigQuery Job User            (roles/bigquery.jobUser)
+   If Vision doesn't show a precise role, use "Service Usage Consumer" and
+   flag it to me.
+4. Skip the "Grant users access" step. Click Done.
+5. Open the new service account, go to the "Keys" tab, click
+   "Add key → Create new key → JSON". This downloads a .json file.
+
+Tell me the file's download path. Do NOT paste its contents. I will base64
+or inline it into GOOGLE_APPLICATION_CREDENTIALS_JSON myself.
+
+CHECKPOINT: confirm the four roles were granted and the JSON downloaded.
+
+================================================================================
+STEP 5 — DOCUMENT AI PROCESSOR
+================================================================================
+1. Go to https://console.cloud.google.com/ai/document-ai/processors
+2. Click "Create processor".
+3. Pick "Expense Parser" (under Specialized / Receipts). Region: "us" unless
+   I specify otherwise.
+4. Name: "rethread-receipts".
+5. After creation, open the processor and copy the full resource name — it
+   looks like:
+      projects/123456789/locations/us/processors/abc123def456
+   This full string is DOCAI_PROCESSOR_ID. Not just the short id.
+
+CHECKPOINT: tell me the full resource name so I can paste it into .env.local.
+
+================================================================================
+STEP 6 — BIGQUERY DATASET
+================================================================================
+1. Go to https://console.cloud.google.com/bigquery
+2. Pin the project if prompted.
+3. Click the project's three-dot menu → "Create dataset".
+4. Dataset ID: "brand_ratings". Location: "US" multi-region. Leave defaults.
+5. Click Create.
+
+The app will expect the fully-qualified name "<project_id>.brand_ratings".
+Update BIGQUERY_DATASET in .env.local accordingly — tell me the full string.
+
+CHECKPOINT: confirm the dataset exists and give me its fully-qualified name.
+
+================================================================================
+STEP 7 — GEMINI API KEY (separate, not in Cloud Console)
+================================================================================
+1. Open a new tab to https://aistudio.google.com/apikey
+2. Sign in with the same Google account.
+3. Click "Create API key" and select the "rethread" GCP project when
+   prompted so the key bills to the same project.
+4. Copy the key — do NOT paste it into chat. Tell me:
+      - last 4 characters
+      - which project the key is bound to
+   and tell me to put it in GEMINI_API_KEY.
+
+CHECKPOINT: done.
+
+================================================================================
+FINAL REPORT
+================================================================================
+When every step is complete, print a summary table with one row per env var:
+
+  VAR                                  STATUS       NOTES
+  GOOGLE_APPLICATION_CREDENTIALS_JSON  downloaded   path to .json file
+  GEMINI_API_KEY                       created      last 4 chars
+  GOOGLE_MAPS_API_KEY                  created      last 4 chars, restrictions
+  DOCAI_PROCESSOR_ID                   created      full resource name
+  BIGQUERY_DATASET                     created      fully qualified id
+
+Then remind me to restart `bun dev` after saving .env.local.
