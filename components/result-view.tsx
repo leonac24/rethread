@@ -204,18 +204,8 @@ export function ResultView({ id }: ResultViewProps) {
   const fiberData = data?.result.garment.fibers.map((f) => ({ name: f.material, value: f.percentage })) ?? [];
 
   return (
-    <main className="min-h-screen bg-bg">
-      {/* Header */}
-      <div className="px-4 pt-8 pb-2 flex items-center gap-3">
-        <a href="/" className="flex items-center justify-center w-9 h-9 rounded-full bg-surface" style={{ boxShadow: '0 1px 6px rgba(20,22,26,0.09)' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-muted">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </a>
-        <h1 className="font-semibold text-[17px] text-ink">Scan Result</h1>
-      </div>
-
-      <div className="pb-10 pt-4 space-y-3 content-width">
+    <main className="min-h-screen bg-bg md:pt-[80px]">
+      <div className="pb-10 pt-2 space-y-3 content-width">
 
         {/* Loading / Error */}
         {!data && !error && (
@@ -234,7 +224,7 @@ export function ResultView({ id }: ResultViewProps) {
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
                   <span
                     className="font-display font-bold text-ink select-none whitespace-nowrap"
-                    style={{ fontSize: 72, opacity: 0.04, transform: 'rotate(-8deg)' }}
+                    style={{ fontSize: 122, opacity: 0.04, transform: 'rotate(-8deg)' }}
                   >
                     {data.result.garment.category}
                   </span>
@@ -243,7 +233,7 @@ export function ResultView({ id }: ResultViewProps) {
 
               <SectionLabel>Garment</SectionLabel>
 
-              <div className="flex gap-4 items-start relative z-10">
+              <div className="flex flex-wrap sm:flex-nowrap gap-4 items-start relative z-10">
                 {/* Polaroid frame with photo */}
                 {data.previews?.length ? (
                   <div className="flex-shrink-0 relative w-[200px]" style={{ transform: 'rotate(-3deg)' }}>
@@ -291,17 +281,26 @@ export function ResultView({ id }: ResultViewProps) {
                       )}
                     </>
                   )}
-                </div>
-              </div>
 
-              {/* Extra previews if more than one */}
-              {data.previews && data.previews.length > 1 && (
-                <div className="flex gap-2 mt-4 overflow-x-auto">
-                  {data.previews.slice(1).map((src, i) => (
-                    <img key={i} src={src} alt={`Tag ${i + 1}`} className="h-[64px] w-auto rounded-lg object-contain flex-shrink-0 border border-rule" />
-                  ))}
+                  {/* Secondary images — mobile: under details */}
+                  {data.previews && data.previews.length > 1 && (
+                    <div className="grid grid-cols-2 gap-2 mt-3 w-fit sm:hidden">
+                      {data.previews.slice(1).map((src, i) => (
+                        <img key={i} src={src} alt={`Tag ${i + 1}`} className="w-[56px] h-[56px] rounded-lg object-cover border border-rule" />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Secondary images — desktop: far right stacked */}
+                {data.previews && data.previews.length > 1 && (
+                  <div className="hidden sm:flex flex-col gap-2 flex-shrink-0">
+                    {data.previews.slice(1).map((src, i) => (
+                      <img key={i} src={src} alt={`Tag ${i + 1}`} className="w-[56px] h-[56px] rounded-lg object-cover border border-rule" />
+                    ))}
+                  </div>
+                )}
+              </div>
             </Card>
 
             {/* ── Fiber Composition ───────────────────────────────── */}
