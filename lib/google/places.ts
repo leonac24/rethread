@@ -64,7 +64,10 @@ async function nearest(
     },
     body: JSON.stringify({
       textQuery: QUERIES[kind],
-      locationRestriction: {
+      // searchText only supports circles via locationBias; locationRestriction
+      // is rectangle-only on this endpoint. rankPreference DISTANCE is
+      // compatible with locationBias.circle.
+      locationBias: {
         circle: {
           center: { latitude: lat, longitude: lng },
           radius: 5000,
@@ -76,7 +79,10 @@ async function nearest(
   });
 
   if (!res.ok) {
-    throw new Error(`Places searchText failed for ${kind}: ${res.status}`);
+    const body = await res.text().catch(() => '');
+    throw new Error(
+      `Places searchText failed for ${kind}: ${res.status} ${body}`,
+    );
   }
 
   const data = (await res.json()) as PlacesResponse;
@@ -142,8 +148,10 @@ function acceptsItem(
   category: string | null,
   types: string[],
 ): boolean | null {
-  // Donation centers rarely expose distinctive place types — returning a
-  // boolean here would be fake precision, so signal "unknown" with null.
+  // Donation centers rarely expose distinctive place types. Small tailors
+  // and thrift shops often carry only generic types like `establishment` /
+  // `point_of_interest`. A positive whitelist hit is trustworthy; anything
+  // else is "don't know" (null) rather than a confident false.
   if (kind === 'donation') return null;
   if (!category) return true;
 
@@ -152,5 +160,5 @@ function acceptsItem(
     c,
   );
   const acceptable = isShoes ? SHOE_TYPES : CLOTHING_TYPES;
-  return types.some((t) => acceptable.includes(t));
+  return types.some((t) => acceptable.includes(t)) ? true : null;
 }
