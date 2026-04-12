@@ -4,6 +4,23 @@ import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/visi
 import { saveScanResult } from '@/lib/scan-store';
 import type { RouteOption, ScanResult } from '@/types/garment';
 
+// Rate limiting: max 5 requests per IP per minute
+const RATE_LIMIT = 5;
+const WINDOW_MS = 60_000;
+const ipHits = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = ipHits.get(ip);
+  if (!entry || now > entry.resetAt) {
+    ipHits.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 function fallbackRoutes(): [RouteOption, RouteOption, RouteOption] {
   return [
     {
@@ -31,6 +48,18 @@ function fallbackRoutes(): [RouteOption, RouteOption, RouteOption] {
 }
 
 export async function POST(request: Request) {
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown';
+
+  if (!checkRateLimit(ip)) {
+    return Response.json(
+      { error: 'Too many requests. Please wait a moment before scanning again.' },
+      { status: 429 },
+    );
+  }
+
   try {
     return await handleScan(request);
   } catch (err) {
