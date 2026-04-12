@@ -219,10 +219,10 @@ export function ResultView({ id }: ResultViewProps) {
 
         {/* Loading / Error */}
         {!data && !error && (
-          <p className="text-center text-[14px] text-ink-muted py-16">Loading result...</p>
+          <p className="text-center text-[14px] text-ink-muted py-5">Loading result...</p>
         )}
         {error && (
-          <p className="text-center text-[14px] text-danger py-16">{error}</p>
+          <p className="text-center text-[14px] text-danger py-5">{error}</p>
         )}
 
         {data && (

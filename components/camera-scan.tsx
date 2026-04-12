@@ -138,7 +138,7 @@ export function CameraScan() {
     setStaged((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function compressImage(file: File, maxPx = 1200, quality = 0.7): Promise<string> {
+  function compressImage(file: File, maxPx = 800, quality = 0.5): Promise<string> {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -182,7 +182,7 @@ export function CameraScan() {
   const totalQueued = staged.length + (garmentPhoto ? 1 : 0);
 
   return (
-    <main className="min-h-screen bg-bg px-4 py-6 flex items-center justify-center">
+    <main className="min-h-screen bg-bg px-4 py-2 flex items-center justify-center">
       <div className="w-full max-w-2xl space-y-4">
 
         <div className="grid grid-cols-2 gap-x-[80px] gap-y-6">

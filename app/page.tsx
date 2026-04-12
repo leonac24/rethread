@@ -6,14 +6,14 @@ const CONTENT_WIDTH = 'w-[90%] mx-auto';
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col">
-      <section className="relative flex items-center overflow-hidden" style={{ minHeight: 'calc(100vh - 80px)' }}>
+      <section className="relative flex items-center overflow-hidden" style={{ minHeight: 'calc((100vh - 80px) * 2 / 3)' }}>
         <div className="hidden xl:block absolute top-1/2 -translate-y-1/2" style={{ left: '-44px' }}>
           <Image src="/images/shoelace.png" alt="Shoelace" width={312} height={390} className="object-contain opacity-80" />
         </div>
         <div className="hidden xl:block absolute top-1/2 -translate-y-1/2" style={{ right: '-44px' }}>
           <Image src="/images/headphones.png" alt="Headphones" width={312} height={390} className="object-contain opacity-80" />
         </div>
-        <div className={`${CONTENT_WIDTH} py-16 md:py-24 relative flex items-center justify-between gap-8`}>
+        <div className={`${CONTENT_WIDTH} pb-5 md:pb-8 relative flex items-center justify-between gap-8`}>
           <div className="relative z-10 flex-1">
             <div className="text-[14px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-8">
               Garment&nbsp;·&nbsp;Footprint&nbsp;·&nbsp;Route
@@ -68,7 +68,7 @@ export default function Home() {
       </section>
 
       <section id="how" className="border-t border-rule">
-        <div className={`${CONTENT_WIDTH} py-16 md:py-24`}>
+        <div className={`${CONTENT_WIDTH} py-5 md:py-8`}>
           <div className="flex flex-col gap-8">
 
             {/* Row 1: Card left, image right */}
