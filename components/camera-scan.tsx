@@ -124,74 +124,45 @@ export function CameraScan() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    const saved = sessionStorage.getItem('scan:error');
+    if (saved) {
+      setError(saved);
+      sessionStorage.removeItem('scan:error');
+    }
+  }, []);
+
   function removeStaged(index: number) {
     setStaged((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function handleScan() {
+  function handleScan() {
     if (!staged.length && !garmentPhoto) return;
 
     setError('');
     setIsLoading(true);
 
-    try {
-      const coords = await getCurrentCoords();
-      console.log('[scan] geolocation result:', coords);
+    const allFiles = [...(garmentPhoto ? [garmentPhoto] : []), ...staged];
+    const readers = allFiles.map(
+      (f) =>
+        new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(f);
+        }),
+    );
 
-      const formData = new FormData();
-      if (garmentPhoto) {
-        formData.append('garment_photo', garmentPhoto);
-      }
-      for (const file of staged) {
-        formData.append('photo', file);
-      }
-      if (coords) {
-        formData.append('lat', String(coords.lat));
-        formData.append('lng', String(coords.lng));
-      }
+    router.push('/scanning');
 
-      const response = await fetch('/api/scan', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const text = await response.text();
-      let payload: Partial<ScanResponse> & { error?: string } = {};
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        throw new Error(`Server error (${response.status}): ${text.slice(0, 200) || 'empty response'}`);
-      }
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'Scan failed.');
-      }
-
-      if (payload.id && payload.result && typeof payload.text === 'string') {
-        const allFiles = [...(garmentPhoto ? [garmentPhoto] : []), ...staged];
-        const previews = await Promise.all(
-          allFiles.map(
-            (f) =>
-              new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(f);
-              }),
-          ),
-        );
-        sessionStorage.setItem(
-          `scan:${payload.id}`,
-          JSON.stringify({ text: payload.text, result: payload.result, previews }),
-        );
-        router.push(`/result/${payload.id}`);
-      }
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Scan failed.');
-    } finally {
-      setIsLoading(false);
-      setStaged([]);
-      setGarmentPhoto(null);
-    }
+    Promise.all(readers).then((dataUrls) => {
+      sessionStorage.setItem(
+        'scan:pending',
+        JSON.stringify({
+          files: dataUrls,
+          hasGarmentPhoto: garmentPhoto !== null,
+        }),
+      );
+    });
   }
 
   const canScan = (staged.length > 0 || garmentPhoto !== null) && !isLoading;
