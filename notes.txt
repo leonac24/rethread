@@ -1,0 +1,19 @@
+Strengths:
+
+Structured AI output — Gemini responseSchema enforces types, no freeform parsing
+Server-only secrets — API keys never touch the browser
+Internal parallelism — Vision + Gemini image run together; Cost + Routes run together
+Graceful degradation — no stage failure hard-errors the response
+
+Scaling risks if this went to prod:
+
+scan-store.ts in-memory Map dies on multi-instance deploys (Vercel serverless) → needs Redis or Vercel KV
+.scan-cache/ filesystem writes fail on read-only serverless → needs R2/S3
+No rate limiting on POST /api/scan — Vision + Gemini cost real money per call
+sessionStorage handoff breaks cross-tab sharing (GET fallback exists but only within 30min TTL)
+
+Unfinished:
+
+docai.ts — stubbed, throws Not implemented
+app/results/page.tsx — dummy data, not wired to scan store
+BigQuery brand table — schema TBD, no data yet
