@@ -135,11 +135,13 @@ rethread/
 ## Environment
 
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS_JSON=   # service account (inline)
+GOOGLE_APPLICATION_CREDENTIALS_FILE=   # absolute path to local service-account json
+GOOGLE_CLOUD_PROJECT=rethread-tag-ingestion
+GOOGLE_APPLICATION_CREDENTIALS_JSON=   # optional inline service account json
 GEMINI_API_KEY=
 GOOGLE_MAPS_API_KEY=
 DOCAI_PROCESSOR_ID=
-BIGQUERY_DATASET=rethread.brand_ratings
+BIGQUERY_DATASET=rethread-tag-ingestion.brand_ratings
 ```
 
 ---
