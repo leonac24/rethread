@@ -117,9 +117,7 @@ function inferBrand(text: string): string | undefined {
   return undefined;
 }
 
-export async function readClothingLabel(
-  image: Buffer,
-): Promise<Partial<Garment>> {
+export async function readClothingLabelText(image: Buffer): Promise<string> {
   if (!image.length) {
     throw new Error('Image buffer is empty');
   }
@@ -133,6 +131,14 @@ export async function readClothingLabel(
     result.fullTextAnnotation?.text ??
     result.textAnnotations?.[0]?.description ??
     '';
+
+  return text;
+}
+
+export async function readClothingLabel(
+  image: Buffer,
+): Promise<Partial<Garment>> {
+  const text = await readClothingLabelText(image);
 
   if (!text.trim()) {
     return {
