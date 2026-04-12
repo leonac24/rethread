@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react';
 
 import type { RouteOption, ScanResult } from '@/types/garment';
 
+function truncate(text: string, maxWords: number): string {
+  const words = text.split(/\s+/);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(' ') + '...';
+}
+
 function mapsUrl(route: RouteOption): string {
   const query = encodeURIComponent(route.name + ', ' + route.address);
   return `https://www.google.com/maps/search/?api=1&query=${query}`;
@@ -31,6 +37,7 @@ export function ResultView({ id }: ResultViewProps) {
   const [data, setData] = useState<{
     text: string;
     result: ScanResult;
+    previews?: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,11 +51,12 @@ export function ResultView({ id }: ResultViewProps) {
           const parsed = JSON.parse(cached) as {
             text?: string;
             result?: ScanResult;
+            previews?: string[];
           };
 
           if (parsed.result && typeof parsed.text === 'string') {
             if (isActive) {
-              setData({ text: parsed.text, result: parsed.result });
+              setData({ text: parsed.text, result: parsed.result, previews: parsed.previews });
             }
             return;
           }
@@ -89,9 +97,22 @@ export function ResultView({ id }: ResultViewProps) {
   return (
     <main className="min-h-screen bg-bg px-4 py-6 flex items-start justify-center">
       <section className="w-full max-w-2xl rounded-lg border border-rule bg-surface p-4 shadow-sm sm:p-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-muted">
+        <h1 className="font-mono text-[22px] font-semibold uppercase tracking-[0.16em] text-ink text-center">
           Scan Result
-        </p>
+        </h1>
+
+        {data?.previews?.length ? (
+          <div className="mt-4 flex justify-center gap-3">
+            {data.previews.map((src, i) => (
+              <img
+                key={i}
+                src={src}
+                alt={`Upload ${i + 1}`}
+                className="h-[140px] w-auto rounded-md border border-rule object-contain"
+              />
+            ))}
+          </div>
+        ) : null}
 
         {!data && !error ? (
           <p className="mt-3 text-[14px] text-ink-muted">Loading result...</p>
@@ -164,7 +185,7 @@ export function ResultView({ id }: ResultViewProps) {
               <p className="mt-3 text-[13px] text-ink-muted">
                 Confidence: {data.result.cost.confidence}
               </p>
-              <p className="mt-2 text-[14px] leading-[22px] text-ink">{data.result.cost.reasoning}</p>
+              <p className="mt-2 text-[14px] leading-[22px] text-ink">{truncate(data.result.cost.reasoning, 60)}</p>
               {data.result.cost.dye_type ? (
                 <div className="mt-4 rounded-md border border-rule bg-surface p-3">
                   <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Dye Type</p>

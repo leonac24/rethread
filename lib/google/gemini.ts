@@ -19,6 +19,7 @@ function buildPrompt(garment: Garment, brandContext?: string) {
     'Estimate environmental cost for a single garment using known apparel benchmarks and conservative assumptions.',
     'Focus on water use, CO2 emissions, and dye pollution risk from fiber blend + origin country + category.',
     'If data is missing, use sensible defaults and lower confidence accordingly.',
+    'Keep the reasoning field under 60 words.',
     'Return only valid JSON matching schema.',
     '',
     `Garment JSON: ${JSON.stringify(garment)}`,

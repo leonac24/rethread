@@ -168,9 +168,20 @@ export function CameraScan() {
       }
 
       if (payload.id && payload.result && typeof payload.text === 'string') {
+        const allFiles = [...(garmentPhoto ? [garmentPhoto] : []), ...staged];
+        const previews = await Promise.all(
+          allFiles.map(
+            (f) =>
+              new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(f);
+              }),
+          ),
+        );
         sessionStorage.setItem(
           `scan:${payload.id}`,
-          JSON.stringify({ text: payload.text, result: payload.result }),
+          JSON.stringify({ text: payload.text, result: payload.result, previews }),
         );
         router.push(`/result/${payload.id}`);
       }
