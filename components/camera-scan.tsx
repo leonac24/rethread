@@ -1,7 +1,7 @@
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import type { ScanResult } from '@/types/garment';
 
@@ -29,7 +29,6 @@ function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export function CameraScan() {
-  const router = useRouter();
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [text, setText] = useState('');
@@ -106,9 +105,7 @@ export function CameraScan() {
             disabled={isLoading}
             className="rounded-md border border-rule bg-bg px-4 py-5 text-left transition-colors hover:bg-surface-sunk disabled:opacity-60"
           >
-            <span className="block text-[14px] font-medium text-ink">
-              {isLoading ? 'Scanning...' : 'Open camera'}
-            </span>
+            <span className="block text-[14px] font-medium text-ink">Open camera</span>
           </button>
 
           <button
@@ -117,9 +114,7 @@ export function CameraScan() {
             disabled={isLoading}
             className="rounded-md border border-rule bg-bg px-4 py-5 text-left transition-colors hover:bg-surface-sunk disabled:opacity-60"
           >
-            <span className="block text-[14px] font-medium text-ink">
-              {isLoading ? 'Scanning...' : 'Upload image'}
-            </span>
+            <span className="block text-[14px] font-medium text-ink">Upload images</span>
           </button>
         </div>
 
@@ -128,7 +123,7 @@ export function CameraScan() {
           type="file"
           accept="image/*"
           capture="environment"
-          onChange={handleChange}
+          onChange={handleFilesSelected}
           className="sr-only"
           aria-label="Capture a tag photo"
         />
@@ -137,24 +132,71 @@ export function CameraScan() {
           ref={uploadInputRef}
           type="file"
           accept="image/*"
-          onChange={handleChange}
+          multiple
+          onChange={handleFilesSelected}
           className="sr-only"
-          aria-label="Upload a tag photo"
+          aria-label="Upload tag photos"
         />
 
-        <div className="mt-4 min-h-24 rounded-md border border-rule bg-bg p-4">
-          {isLoading ? (
-            <p className="text-[14px] text-ink-muted">Uploading and reading text...</p>
-          ) : error ? (
-            <p className="text-[14px] text-danger">{error}</p>
-          ) : text ? (
-            <pre className="whitespace-pre-wrap text-[14px] leading-[22px] text-ink">
-              {text}
-            </pre>
-          ) : (
-            <p className="text-[14px] text-ink-muted">Your OCR result will appear here.</p>
-          )}
-        </div>
+        {staged.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">
+              Queued ({staged.length})
+            </p>
+            {staged.map((file, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2"
+              >
+                <span className="truncate text-[14px] text-ink">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeStaged(i)}
+                  disabled={isLoading}
+                  className="ml-3 shrink-0 text-[13px] text-ink-muted hover:text-danger disabled:opacity-40"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={handleScan}
+              disabled={isLoading}
+              className="mt-1 w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium disabled:opacity-60"
+            >
+              {isLoading
+                ? `Scanning ${progress.done} of ${progress.total}...`
+                : `Scan ${staged.length} tag${staged.length === 1 ? '' : 's'}`}
+            </button>
+          </div>
+        )}
+
+        {(scanned.length > 0 || errors.length > 0) && (
+          <div className="mt-4 space-y-2">
+            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">Results</p>
+            {errors.map((e, i) => (
+              <p key={i} className="text-[14px] text-danger">{e}</p>
+            ))}
+            {scanned.map((item) => (
+              <Link
+                key={item.id}
+                href={`/result/${item.id}`}
+                className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 text-[14px] text-ink hover:bg-surface-sunk"
+              >
+                <span className="truncate">{item.fileName}</span>
+                <span className="ml-3 shrink-0 text-ink-muted">View →</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {staged.length === 0 && scanned.length === 0 && !isLoading && (
+          <div className="mt-4 min-h-24 rounded-md border border-rule bg-bg p-4">
+            <p className="text-[14px] text-ink-muted">Upload images to get started.</p>
+          </div>
+        )}
       </section>
     </main>
   );
