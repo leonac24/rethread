@@ -26,6 +26,7 @@ html {
   --font-display: var(--font-fraunces), 'Playfair Display', serif;
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), 'IBM Plex Mono', monospace;
+  --font-handwriting: var(--font-marker), cursive;
 
   --radius-sm: 2px;
   --radius-md: 6px;

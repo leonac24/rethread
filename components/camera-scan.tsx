@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -68,7 +69,7 @@ function UploadDropdown({ disabled, multiple, onFiles }: UploadDropdownProps) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
-        className="w-full rounded-md border border-dashed border-rule bg-bg px-4 py-4 text-[14px] text-ink-muted transition-colors hover:bg-surface-sunk disabled:opacity-60"
+        className="w-full h-11 rounded-md bg-ink text-bg text-[14px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
       >
         Add photo
       </button>
@@ -137,6 +138,25 @@ export function CameraScan() {
     setStaged((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function compressImage(file: File, maxPx = 1200, quality = 0.7): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = new window.Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function handleScan() {
     if (!staged.length && !garmentPhoto) return;
 
@@ -144,18 +164,10 @@ export function CameraScan() {
     setIsLoading(true);
 
     const allFiles = [...(garmentPhoto ? [garmentPhoto] : []), ...staged];
-    const readers = allFiles.map(
-      (f) =>
-        new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(f);
-        }),
-    );
 
     router.push('/scanning');
 
-    Promise.all(readers).then((dataUrls) => {
+    Promise.all(allFiles.map((f) => compressImage(f))).then((dataUrls) => {
       sessionStorage.setItem(
         'scan:pending',
         JSON.stringify({
@@ -170,70 +182,67 @@ export function CameraScan() {
   const totalQueued = staged.length + (garmentPhoto ? 1 : 0);
 
   return (
-    <main className="min-h-screen bg-bg px-4 py-6 flex items-start justify-center">
+    <main className="min-h-screen bg-bg px-4 py-6 flex items-center justify-center">
       <div className="w-full max-w-2xl space-y-4">
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-6">
 
-          {/* Garment image */}
-          <section className="rounded-lg border border-rule bg-surface p-4">
-            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">Garment</p>
-            <p className="mt-2 text-[13px] leading-[19px] text-ink-muted">
-              Upload a photo of the clothing item itself. We'll detect the garment type and color to identify the likely dye and its environmental impact.
-            </p>
-            <div className="mt-4">
+          {/* Garment */}
+          <div className="flex flex-col items-center gap-3">
+            {/* Frame with garment inside */}
+            <div className="relative w-[130%] -mx-[15%] mb-[10px]">
+              {/* Garment image inside frame opening */}
+              <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '0%', paddingBottom: '16%', paddingLeft: '2%', paddingRight: '2%', transform: 'scale(1.3)', transformOrigin: 'center center' }}>
+                <Image src="/images/garment.png" alt="Garment" width={200} height={200} className="w-full h-full object-contain" />
+              </div>
+              {/* Frame overlay */}
+              <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
+              {/* Description at bottom of frame */}
+              <div className="absolute bottom-0 left-0 right-0 z-20 pb-3 text-center" style={{ paddingLeft: '15%', paddingRight: '15%', bottom: '20px' }}>
+                <p style={{ fontFamily: 'var(--font-handwriting)' }} className="text-[12px] leading-[17px] sm:text-[18px] sm:leading-[24px] text-ink-muted">Upload a photo of the clothing item. We'll detect the garment type and color.</p>
+              </div>
+            </div>
+            {/* Upload button separate */}
+            <div className="w-full">
               {garmentPhoto ? (
-                <div className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2">
-                  <span className="truncate text-[14px] text-ink">{garmentPhoto.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => setGarmentPhoto(null)}
-                    disabled={isLoading}
-                    className="ml-3 shrink-0 text-[13px] text-ink-muted hover:text-danger disabled:opacity-40"
-                  >
-                    Remove
-                  </button>
+                <div className="flex w-full items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 h-11">
+                  <span className="truncate text-[13px] text-ink">{garmentPhoto.name}</span>
+                  <button type="button" onClick={() => setGarmentPhoto(null)} disabled={isLoading} className="ml-3 shrink-0 text-[12px] text-ink-muted hover:text-danger disabled:opacity-40">Remove</button>
                 </div>
               ) : (
-                <UploadDropdown
-                  disabled={isLoading}
-                  multiple={false}
-                  onFiles={(files) => setGarmentPhoto(files[0])}
-                />
+                <UploadDropdown disabled={isLoading} multiple={false} onFiles={(files) => setGarmentPhoto(files[0])} />
               )}
             </div>
-          </section>
+          </div>
 
-          {/* Tag images */}
-          <section className="rounded-lg border border-rule bg-surface p-4">
-            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">Tags</p>
-            <p className="mt-2 text-[13px] leading-[19px] text-ink-muted">
-              Upload every tag on the item — brand, size, and care labels. The more tags, the more accurate the fiber and origin analysis.
-            </p>
-            <div className="mt-4 space-y-2">
-              <UploadDropdown
-                disabled={isLoading}
-                multiple
-                onFiles={(files) => setStaged((prev) => [...prev, ...files])}
-              />
+          {/* Tags */}
+          <div className="flex flex-col items-center gap-3">
+            {/* Frame with tag inside */}
+            <div className="relative w-[130%] -mx-[15%] mb-[10px]">
+              {/* Tag image inside frame opening */}
+              <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '0%', paddingBottom: '16%', paddingLeft: '2%', paddingRight: '2%', transform: 'scale(1.3) translateY(20px)', transformOrigin: 'center center' }}>
+                <Image src="/images/tag.png" alt="Tag" width={200} height={200} className="w-full h-full object-contain" />
+              </div>
+              {/* Frame overlay */}
+              <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
+              {/* Description at bottom of frame */}
+              <div className="absolute bottom-0 left-0 right-0 z-20 pb-3 text-center" style={{ paddingLeft: '15%', paddingRight: '15%', bottom: '20px' }}>
+                <p style={{ fontFamily: 'var(--font-handwriting)' }} className="text-[12px] leading-[17px] sm:text-[18px] sm:leading-[24px] text-ink-muted">Upload every tag — brand, size, and care labels for accurate analysis.</p>
+              </div>
+            </div>
+            {/* Upload button separate */}
+            <div className="w-full space-y-2">
+              <div className="w-full">
+                <UploadDropdown disabled={isLoading} multiple onFiles={(files) => setStaged((prev) => [...prev, ...files])} />
+              </div>
               {staged.map((file, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2"
-                >
+                <div key={i} className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2">
                   <span className="truncate text-[13px] text-ink">{file.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeStaged(i)}
-                    disabled={isLoading}
-                    className="ml-3 shrink-0 text-[12px] text-ink-muted hover:text-danger disabled:opacity-40"
-                  >
-                    Remove
-                  </button>
+                  <button type="button" onClick={() => removeStaged(i)} disabled={isLoading} className="ml-3 shrink-0 text-[12px] text-ink-muted hover:text-danger disabled:opacity-40">Remove</button>
                 </div>
               ))}
             </div>
-          </section>
+          </div>
         </div>
 
         {isLoading ? (

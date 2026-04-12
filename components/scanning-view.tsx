@@ -250,7 +250,7 @@ export function ScanningView() {
       ]);
 
       if (!pending) {
-        router.replace('/');
+        router.replace('/scan');
         return;
       }
 
@@ -306,7 +306,7 @@ export function ScanningView() {
           'scan:error',
           err instanceof Error ? err.message : 'Scan failed.',
         );
-        router.replace('/');
+        router.replace('/scan');
       }
     }
 

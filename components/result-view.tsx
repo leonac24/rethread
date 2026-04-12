@@ -87,11 +87,11 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function Card({ children, className = '', style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
     <div
       className={`bg-surface rounded-2xl p-5 ${className}`}
-      style={{ boxShadow: '0 2px 16px rgba(20,22,26,0.07)' }}
+      style={{ boxShadow: '0 2px 16px rgba(20,22,26,0.07)', ...style }}
     >
       {children}
     </div>
@@ -262,7 +262,7 @@ export function ResultView({ id }: ResultViewProps) {
                     <span
                       key={d.name}
                       className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-ink"
-                      style={{ backgroundColor: FIBER_COLORS[i % FIBER_COLORS.length] + '28' }}
+                      style={{ backgroundColor: FIBER_COLORS[i % FIBER_COLORS.length] }}
                     >
                       <span
                         className="inline-block w-2 h-2 rounded-full flex-shrink-0"
