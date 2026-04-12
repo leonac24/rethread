@@ -8,7 +8,7 @@ Rethread is a Next.js app that turns a single photo of a clothing label into a c
 
 ## What it does
 
-1. **Scan** — user snaps a photo of a care label (or drops in a receipt).
+1. **Scan** — user snaps a photo of a care label.
 2. **Reason** — Gemini computes the garment's fiber-to-landfill footprint from the extracted data.
 3. **Route** — the app returns the three nearest places to repair, resell, or donate it.
 
