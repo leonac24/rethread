@@ -125,12 +125,13 @@ export function CameraScan() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    router.prefetch('/scanning');
     const saved = sessionStorage.getItem('scan:error');
     if (saved) {
       setError(saved);
       sessionStorage.removeItem('scan:error');
     }
-  }, []);
+  }, [router]);
 
   function removeStaged(index: number) {
     setStaged((prev) => prev.filter((_, i) => i !== index));

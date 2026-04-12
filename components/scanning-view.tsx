@@ -130,6 +130,7 @@ export function ScanningView() {
   const router = useRouter();
   const mountRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
+  const [modelReady, setModelReady] = useState(false);
 
   // ── 3D scene ───────────────────────────────────────────────────────────
 
@@ -196,6 +197,7 @@ export function ScanningView() {
       scene.add(pivot);
 
       geometries.forEach((g) => g.dispose());
+      setModelReady(true);
     });
 
     let lastTime = 0;
@@ -315,8 +317,8 @@ export function ScanningView() {
     <main className="min-h-screen bg-bg flex flex-col items-center justify-center px-4">
       <div
         ref={mountRef}
-        className="w-full"
-        style={{ height: 260, pointerEvents: 'none' }}
+        className="w-full transition-opacity duration-700"
+        style={{ height: 260, pointerEvents: 'none', opacity: modelReady ? 1 : 0 }}
       />
       <BlurbCycler />
     </main>
