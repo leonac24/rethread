@@ -1,7 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+} from 'recharts';
 import type { RouteOption, ScanResult } from '@/types/garment';
 
 function truncate(text: string, maxWords: number): string {
@@ -29,6 +39,9 @@ var icon=L.icon({iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-ico
 <\/script></body></html>`;
 }
 
+
+const FIBER_COLORS = ['#6FA8CE', '#8B9E6E', '#C8A24A', '#B8739D', '#C4956A', '#8E6BAD', '#6AADA8', '#A6ADB6'];
+
 type ResultViewProps = {
   id: string;
 };
@@ -40,6 +53,7 @@ export function ResultView({ id }: ResultViewProps) {
     previews?: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ocrOpen, setOcrOpen] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -94,15 +108,19 @@ export function ResultView({ id }: ResultViewProps) {
     };
   }, [id]);
 
+  const dyeScore = data?.result.cost.dye_pollution_score ?? 0;
+  const dyeColor = dyeScore <= 3 ? '#5E8B6C' : dyeScore <= 6 ? '#C8A24A' : '#B23A2B';
+  const fiberData = data?.result.garment.fibers.map((f) => ({ name: f.material, value: f.percentage })) ?? [];
+
   return (
     <main className="min-h-screen bg-bg px-4 py-6 flex items-start justify-center">
-      <section className="w-full max-w-2xl rounded-lg border border-rule bg-surface p-4 shadow-sm sm:p-5">
-        <h1 className="font-mono text-[22px] font-semibold uppercase tracking-[0.16em] text-ink text-center">
+      <section className="w-full max-w-2xl">
+        <h1 className="font-mono text-[22px] font-semibold uppercase tracking-[0.16em] text-ink text-center pb-5">
           Scan Result
         </h1>
 
         {data?.previews?.length ? (
-          <div className="mt-4 flex justify-center gap-3">
+          <div className="flex justify-center gap-3 pb-4">
             {data.previews.map((src, i) => (
               <img
                 key={i}
@@ -115,100 +133,184 @@ export function ResultView({ id }: ResultViewProps) {
         ) : null}
 
         {!data && !error ? (
-          <p className="mt-3 text-[14px] text-ink-muted">Loading result...</p>
+          <p className="text-center text-[14px] text-ink-muted py-8">Loading result...</p>
         ) : null}
 
         {error ? (
-          <p className="mt-3 text-[14px] text-danger">{error}</p>
+          <p className="text-center text-[14px] text-danger py-8">{error}</p>
         ) : null}
 
         {data ? (
-          <div className="mt-4 space-y-4">
-            <section className="rounded-md border border-rule bg-bg p-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted">Garment</p>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-4">
+
+            {/* ── Garment Info ─────────────────────────────────────── */}
+            <div className="rounded-lg border border-rule bg-surface p-4 shadow-sm">
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted mb-3">Garment</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">Category</p>
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Category</p>
                   <p className="mt-1 text-[15px] text-ink">{data.result.garment.category ?? 'Unknown'}</p>
                 </div>
                 <div>
-                  <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">Origin</p>
-                  <p className="mt-1 text-[15px] text-ink">{data.result.garment.origin ?? 'Unknown'}</p>
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Brand</p>
+                  <p className="mt-1 text-[15px] text-ink">{data.result.garment.brand ?? 'Unknown'}</p>
                 </div>
                 <div>
-                  <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">Brand</p>
-                  <p className="mt-1 text-[15px] text-ink">{data.result.garment.brand ?? 'Unknown'}</p>
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Origin</p>
+                  <p className="mt-1 text-[15px] text-ink">{data.result.garment.origin ?? 'Unknown'}</p>
                 </div>
                 {data.result.garment.color ? (
                   <div>
-                    <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">Color</p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Color</p>
                     <p className="mt-1 text-[15px] text-ink">{data.result.garment.color}</p>
                   </div>
                 ) : null}
               </div>
+            </div>
 
-              <div className="mt-3">
-                <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">Fibers</p>
-                {data.result.garment.fibers.length ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {data.result.garment.fibers.map((fiber) => (
-                      <span
-                        key={`${fiber.material}-${fiber.percentage}`}
-                        className="inline-flex items-center rounded-full border border-rule px-3 py-1 text-[13px] text-ink"
+            {/* ── Fiber Composition ─────────────────────────────────── */}
+            {fiberData.length > 0 ? (
+              <div className="rounded-lg border border-rule bg-surface p-4 shadow-sm">
+                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted mb-2">Fiber Composition</p>
+                <div style={{ height: 200 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={fiberData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={82}
+                        paddingAngle={2}
+                        dataKey="value"
+                        startAngle={90}
+                        endAngle={-270}
                       >
-                        {fiber.percentage}% {fiber.material}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-[14px] text-ink-muted">No fibers detected.</p>
-                )}
+                        {fiberData.map((_, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={FIBER_COLORS[index % FIBER_COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value) => [`${value ?? 0}%`, '']}
+                        contentStyle={{
+                          background: '#FBF9F4',
+                          border: '1px solid rgba(20,22,26,0.10)',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          color: '#14161A',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                        }}
+                        itemStyle={{ color: '#14161A' }}
+                        labelStyle={{ display: 'none' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex flex-wrap gap-x-5 gap-y-2 justify-center mt-1">
+                  {fiberData.map((d, i) => (
+                    <div key={d.name} className="flex items-center gap-1.5">
+                      <div
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: FIBER_COLORS[i % FIBER_COLORS.length] }}
+                      />
+                      <span className="text-[12px] text-ink-muted">{d.name} · {d.value}%</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </section>
+            ) : null}
 
-            <section className="rounded-md border border-rule bg-bg p-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted">Environmental Cost</p>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-md border border-rule bg-surface p-3">
-                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Water</p>
-                  <p className="mt-1 text-[18px] text-ink">{Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()} gal</p>
+            {/* ── Environmental Impact ──────────────────────────────── */}
+            <div className="rounded-lg border border-rule bg-surface p-4 shadow-sm">
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted mb-3">Environmental Impact</p>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="rounded-md bg-bg border border-rule p-3">
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Water Usage</p>
+                  <p className="mt-2 text-[24px] font-semibold text-ink leading-none">
+                    {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-[11px] text-ink-muted">gallons</p>
                 </div>
-                <div className="rounded-md border border-rule bg-surface p-3">
-                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">CO2</p>
-                  <p className="mt-1 text-[18px] text-ink">{(data.result.cost.co2_kg * 2.20462).toFixed(1)} lb</p>
-                </div>
-                <div className="rounded-md border border-rule bg-surface p-3">
-                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Dye Risk</p>
-                  <p className="mt-1 text-[18px] text-ink">{data.result.cost.dye_pollution_score}/10</p>
+                <div className="rounded-md bg-bg border border-rule p-3">
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">CO₂ Emitted</p>
+                  <p className="mt-2 text-[24px] font-semibold text-ink leading-none">
+                    {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
+                  </p>
+                  <p className="mt-1 text-[11px] text-ink-muted">pounds</p>
                 </div>
               </div>
-              <p className="mt-3 text-[13px] text-ink-muted">
-                Confidence: {data.result.cost.confidence}
-              </p>
-              <p className="mt-2 text-[14px] leading-[22px] text-ink">{truncate(data.result.cost.reasoning, 60)}</p>
+
+              {/* Dye Risk Bar */}
+              <div className="rounded-md bg-bg border border-rule p-3">
+                <div className="flex items-baseline justify-between mb-3">
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Dye Risk</p>
+                  <span className="text-[22px] font-semibold text-ink leading-none">
+                    {dyeScore}
+                    <span className="text-[13px] font-normal text-ink-muted">&thinsp;/&thinsp;10</span>
+                  </span>
+                </div>
+                <div style={{ height: 28 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[{ filled: dyeScore, empty: 10 - dyeScore }]}
+                      layout="vertical"
+                      margin={{ top: 4, right: 0, bottom: 4, left: 0 }}
+                      barSize={20}
+                    >
+                      <XAxis type="number" domain={[0, 10]} hide />
+                      <YAxis type="category" hide />
+                      <Bar
+                        dataKey="filled"
+                        stackId="a"
+                        fill={dyeColor}
+                        radius={dyeScore === 10 ? [4, 4, 4, 4] : [4, 0, 0, 4]}
+                        isAnimationActive={false}
+                      />
+                      <Bar
+                        dataKey="empty"
+                        stackId="a"
+                        fill="#ECE8DF"
+                        radius={dyeScore === 0 ? [4, 4, 4, 4] : [0, 4, 4, 0]}
+                        isAnimationActive={false}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
               {data.result.cost.dye_type ? (
-                <div className="mt-4 rounded-md border border-rule bg-surface p-3">
+                <div className="mt-3 rounded-md bg-bg border border-rule p-3">
                   <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Dye Type</p>
-                  <p className="mt-1 text-[15px] text-ink">{data.result.cost.dye_type}</p>
+                  <p className="mt-1 text-[14px] text-ink">{data.result.cost.dye_type}</p>
                   {data.result.cost.dye_reasoning ? (
-                    <p className="mt-2 text-[13px] leading-[20px] text-ink-muted">
-                      {data.result.cost.dye_reasoning}
-                    </p>
+                    <p className="mt-2 text-[12px] leading-[18px] text-ink-muted">{data.result.cost.dye_reasoning}</p>
                   ) : null}
                 </div>
               ) : null}
-            </section>
 
-            <section className="rounded-md border border-rule bg-bg p-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted">Next Routes</p>
-              <div className="mt-3 space-y-2">
+              <p className="mt-3 text-[11px] text-ink-faint">
+                Confidence: <span className="capitalize">{data.result.cost.confidence}</span>
+              </p>
+              <p className="mt-1.5 text-[13px] leading-[20px] text-ink-muted">
+                {truncate(data.result.cost.reasoning, 60)}
+              </p>
+            </div>
+
+            {/* ── Next Routes ───────────────────────────────────────── */}
+            <div className="rounded-lg border border-rule bg-surface p-4 shadow-sm">
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted mb-3">Next Routes</p>
+              <div className="space-y-2">
                 {data.result.routes.map((route) => {
                   const srcdoc = mapSrcdoc(route);
                   const hasLocation = route.lat != null && route.lng != null;
                   return (
                     <article
                       key={`${route.kind}-${route.name}`}
-                      className="rounded-md border border-rule bg-surface overflow-hidden"
+                      className="rounded-md border border-rule bg-bg overflow-hidden"
                     >
                       {srcdoc ? (
                         <iframe
@@ -220,10 +322,10 @@ export function ResultView({ id }: ResultViewProps) {
                         />
                       ) : null}
                       <div className="p-3">
-                        <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">{route.kind}</p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">{route.kind}</p>
                         <p className="mt-1 text-[15px] text-ink">{route.name}</p>
-                        <p className="mt-1 text-[13px] text-ink-muted">{route.address}</p>
-                        <div className="mt-1 flex items-center justify-between">
+                        <p className="mt-0.5 text-[13px] text-ink-muted">{route.address}</p>
+                        <div className="mt-1.5 flex items-center justify-between">
                           <p className="text-[13px] text-ink-muted">{(route.distance_km * 0.621371).toFixed(1)} mi away</p>
                           {hasLocation ? (
                             <a
@@ -241,14 +343,40 @@ export function ResultView({ id }: ResultViewProps) {
                   );
                 })}
               </div>
-            </section>
+            </div>
 
-            <section className="rounded-md border border-rule bg-bg p-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted">Raw OCR Text</p>
-              <pre className="mt-2 whitespace-pre-wrap text-[13px] leading-[20px] text-ink">
-                {data.text || 'No text detected.'}
-              </pre>
-            </section>
+            {/* ── Raw OCR Text (collapsible) ────────────────────────── */}
+            <div className="rounded-lg border border-rule bg-surface shadow-sm">
+              <button
+                onClick={() => setOcrOpen((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-3 cursor-pointer"
+              >
+                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted">Raw OCR Text</p>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-ink-faint transition-transform duration-200"
+                  style={{ transform: ocrOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {ocrOpen ? (
+                <div className="border-t border-rule px-4 pb-4 pt-3">
+                  <pre className="whitespace-pre-wrap font-mono text-[12px] leading-[20px] text-ink-muted">
+                    {data.text || 'No text detected.'}
+                  </pre>
+                </div>
+              ) : null}
+            </div>
+
           </div>
         ) : null}
       </section>
