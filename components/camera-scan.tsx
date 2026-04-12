@@ -11,6 +11,23 @@ type ScanResponse = {
   result: ScanResult;
 };
 
+function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        }),
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 },
+    );
+  });
+}
+
 export function CameraScan() {
   const router = useRouter();
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -33,6 +50,13 @@ export function CameraScan() {
     try {
       const formData = new FormData();
       formData.append('photo', file);
+
+      const coords = await getCurrentCoords();
+      console.log('[scan] geolocation result:', coords);
+      if (coords) {
+        formData.append('lat', String(coords.lat));
+        formData.append('lng', String(coords.lng));
+      }
 
       const response = await fetch('/api/scan', {
         method: 'POST',

@@ -67,12 +67,20 @@ export async function POST(request: Request) {
   let routesPromise: Promise<ScanResult['routes']> = Promise.resolve(fallbackRoutes());
   const latRaw = formData.get('lat');
   const lngRaw = formData.get('lng');
+  console.log('[scan] received coords', { latRaw, lngRaw });
   if (typeof latRaw === 'string' && typeof lngRaw === 'string') {
     const lat = Number(latRaw);
     const lng = Number(lngRaw);
     if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-      routesPromise = findRoutes(lat, lng, garment.category).catch(() => fallbackRoutes());
+      routesPromise = findRoutes(lat, lng, garment.category).catch((err) => {
+        console.error('[scan] findRoutes failed:', err);
+        return fallbackRoutes();
+      });
+    } else {
+      console.warn('[scan] coords present but not numeric:', { latRaw, lngRaw });
     }
+  } else {
+    console.warn('[scan] no coords on request — using fallback routes');
   }
 
   const [cost, routes] = await Promise.all([costPromise, routesPromise]);
