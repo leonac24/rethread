@@ -11,84 +11,80 @@ type ScanResponse = {
   result: ScanResult;
 };
 
-type ScannedItem = {
-  id: string;
-  fileName: string;
-};
+function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        }),
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 },
+    );
+  });
+}
 
 export function CameraScan() {
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const [staged, setStaged] = useState<File[]>([]);
-  const [scanned, setScanned] = useState<ScannedItem[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [text, setText] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const isLoading = progress !== null;
+  async function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
 
-  function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    if (!files.length) return;
-    setStaged((prev) => [...prev, ...files]);
-    event.target.value = '';
-  }
+    if (!file) {
+      return;
+    }
 
-  function removeStaged(index: number) {
-    setStaged((prev) => prev.filter((_, i) => i !== index));
-  }
+    setError('');
+    setText('');
+    setIsLoading(true);
 
-  async function handleScan() {
-    if (!staged.length) return;
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
 
-    setErrors([]);
-    setProgress({ done: 0, total: staged.length });
+      const coords = await getCurrentCoords();
+      console.log('[scan] geolocation result:', coords);
+      if (coords) {
+        formData.append('lat', String(coords.lat));
+        formData.append('lng', String(coords.lng));
+      }
 
-    let done = 0;
+      const response = await fetch('/api/scan', {
+        method: 'POST',
+        body: formData,
+      });
 
-    const settled = await Promise.allSettled(
-      staged.map(async (file) => {
-        const formData = new FormData();
-        formData.append('photo', file);
+      const payload = (await response.json()) as Partial<ScanResponse> & {
+        error?: string;
+      };
 
-        const response = await fetch('/api/scan', {
-          method: 'POST',
-          body: formData,
-        });
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Scan failed.');
+      }
 
-        const payload = (await response.json()) as Partial<ScanResponse> & {
-          error?: string;
-        };
+      setText(payload.text ?? '');
 
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Scan failed.');
-        }
-
-        if (payload.id && payload.result && typeof payload.text === 'string') {
-          sessionStorage.setItem(
-            `scan:${payload.id}`,
-            JSON.stringify({ text: payload.text, result: payload.result }),
-          );
-        }
-
-        done += 1;
-        setProgress({ done, total: staged.length });
-
-        return { id: payload.id!, fileName: file.name };
-      }),
-    );
-
-    const successes = settled
-      .filter((r): r is PromiseFulfilledResult<ScannedItem> => r.status === 'fulfilled')
-      .map((r) => r.value);
-
-    const failures = settled
-      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-      .map((r) => (r.reason instanceof Error ? r.reason.message : 'Scan failed.'));
-
-    setProgress(null);
-    setErrors(failures);
-    setStaged([]);
-    setScanned((prev) => [...prev, ...successes]);
+      if (payload.id && payload.result && typeof payload.text === 'string') {
+        sessionStorage.setItem(
+          `scan:${payload.id}`,
+          JSON.stringify({ text: payload.text, result: payload.result }),
+        );
+        router.push(`/result/${payload.id}`);
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Scan failed.');
+    } finally {
+      setIsLoading(false);
+      event.target.value = '';
+    }
   }
 
   function openCamera() {
