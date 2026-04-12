@@ -31,6 +31,16 @@ function fallbackRoutes(): [RouteOption, RouteOption, RouteOption] {
 }
 
 export async function POST(request: Request) {
+  try {
+    return await handleScan(request);
+  } catch (err) {
+    console.error('[scan] unhandled error:', err);
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+async function handleScan(request: Request) {
   const formData = await request.formData();
   const files = formData.getAll('photo');
   const garmentPhotoFile = formData.get('garment_photo');

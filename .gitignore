@@ -12,3 +12,8 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 .scan-cache/
+
+# Google service account credentials
+*.json
+!tsconfig.json
+!package.json

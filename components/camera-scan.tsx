@@ -155,9 +155,13 @@ export function CameraScan() {
         body: formData,
       });
 
-      const payload = (await response.json()) as Partial<ScanResponse> & {
-        error?: string;
-      };
+      const text = await response.text();
+      let payload: Partial<ScanResponse> & { error?: string } = {};
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        throw new Error(`Server error (${response.status}): ${text.slice(0, 200) || 'empty response'}`);
+      }
 
       if (!response.ok) {
         throw new Error(payload.error ?? 'Scan failed.');
