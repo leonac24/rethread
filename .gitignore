@@ -6,6 +6,7 @@ out
 *.log
 .vercel
 next-env.d.ts
+tsconfig.tsbuildinfo
 
 # Use bun exclusively — block other package managers' lockfiles
 package-lock.json
