@@ -11,7 +11,7 @@ type StoredScan = {
 
 const SCAN_TTL_MS = 1000 * 60 * 30;
 const scans = new Map<string, StoredScan>();
-const STORE_DIR = join(process.cwd(), '.scan-cache');
+const STORE_DIR = join('/tmp', '.scan-cache');
 
 function ensureStoreDir() {
   if (!existsSync(STORE_DIR)) {
