@@ -1,7 +1,9 @@
 // Shared Google Cloud service-account credentials.
 // All server-side Google API clients initialize from here.
 
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { GoogleAuth } from 'google-auth-library';
 
 type GoogleCredentials = {
   projectId?: string;
@@ -36,6 +38,13 @@ export function getGoogleCredentials() {
     return cachedCredentials;
   }
 
+  const filePath = process.env.GOOGLE_APPLICATION_CREDENTIALS_FILE;
+  if (filePath) {
+    const contents = readFileSync(filePath, 'utf8');
+    cachedCredentials = parseCredentials(contents);
+    return cachedCredentials;
+  }
+
   const inlineJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (inlineJson) {
     cachedCredentials = parseCredentials(inlineJson);
@@ -59,4 +68,24 @@ export async function getGoogleCredentialsFromFile(
 ): Promise<GoogleCredentials> {
   const contents = await readFile(filePath, 'utf8');
   return parseCredentials(contents);
+}
+
+export async function getGoogleAccessToken(scopes: string | string[]) {
+  const credentials = getGoogleCredentials();
+  const auth = new GoogleAuth({
+    credentials: {
+      type: 'service_account',
+      project_id: credentials.projectId,
+      client_email: credentials.clientEmail,
+      private_key: credentials.privateKey,
+    },
+    scopes,
+  });
+
+  const token = await auth.getAccessToken();
+  if (!token) {
+    throw new Error('Failed to obtain Google access token.');
+  }
+
+  return token;
 }

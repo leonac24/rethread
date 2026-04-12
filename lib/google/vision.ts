@@ -140,6 +140,11 @@ export async function readClothingLabel(
 ): Promise<Partial<Garment>> {
   const text = await readClothingLabelText(image);
 
+  return parseClothingLabelText(text);
+}
+
+export function parseClothingLabelText(text: string): Partial<Garment> {
+
   if (!text.trim()) {
     return {
       fibers: [],

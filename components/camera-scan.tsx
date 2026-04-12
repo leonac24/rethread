@@ -1,12 +1,18 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+import type { ScanResult } from '@/types/garment';
 
 type ScanResponse = {
+  id: string;
   text: string;
+  result: ScanResult;
 };
 
 export function CameraScan() {
+  const router = useRouter();
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [text, setText] = useState('');
@@ -42,14 +48,19 @@ export function CameraScan() {
       }
 
       setText(payload.text ?? '');
+
+      if (payload.id && payload.result && typeof payload.text === 'string') {
+        sessionStorage.setItem(
+          `scan:${payload.id}`,
+          JSON.stringify({ text: payload.text, result: payload.result }),
+        );
+        router.push(`/result/${payload.id}`);
+      }
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Scan failed.');
     } finally {
       setIsLoading(false);
       event.target.value = '';
-      if (inputRef.current) {
-        inputRef.current.value = '';
-      }
     }
   }
 
@@ -98,14 +109,14 @@ export function CameraScan() {
           aria-label="Capture a tag photo"
         />
 
-          <input
-            ref={uploadInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleChange}
-            className="sr-only"
-            aria-label="Upload a tag photo"
-          />
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleChange}
+          className="sr-only"
+          aria-label="Upload a tag photo"
+        />
 
         <div className="mt-4 min-h-24 rounded-md border border-rule bg-bg p-4">
           {isLoading ? (

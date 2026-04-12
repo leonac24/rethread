@@ -48,10 +48,17 @@ export async function getBrandContext(
     return null;
   }
 
+  const defaultProject = credentials.projectId;
+  if (!defaultProject) {
+    throw new Error(
+      'Missing Google project id. Set GOOGLE_CLOUD_PROJECT or include project_id in service account credentials.',
+    );
+  }
+
   const brandColumn = process.env.BIGQUERY_BRAND_COLUMN?.trim() || 'brand';
   const { projectId, datasetId, tableId } = resolveTableRef(
     tableInput,
-    credentials.projectId,
+    defaultProject,
   );
 
   const token = await getGoogleAccessToken([
