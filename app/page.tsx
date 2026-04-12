@@ -1,12 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-const CONTENT_WIDTH = 'w-[90%] mx-auto';
+const CONTENT_WIDTH = 'content-width';
 
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col">
-      <section className="relative flex items-center overflow-hidden" style={{ minHeight: 'calc((100vh - 80px) * 2 / 3)' }}>
+      <section className="relative flex items-start overflow-hidden" style={{ minHeight: 'calc((100vh - 80px) * 2 / 3)' }}>
         <div className="hidden xl:block absolute top-1/2 -translate-y-1/2" style={{ left: '-44px' }}>
           <Image src="/images/shoelace.png" alt="Shoelace" width={312} height={390} className="object-contain opacity-80" />
         </div>
@@ -20,7 +20,7 @@ export default function Home() {
             </div>
 
             <h1
-              className="font-display text-[48px] leading-[52px] md:text-[68px] md:leading-[74px] tracking-[-0.02em] text-ink"
+              className="font-display text-[34px] leading-[36px] md:text-[48px] md:leading-[52px] tracking-[-0.02em] text-ink"
               style={{ fontWeight: 400 }}
             >
               Scan a tag.
@@ -72,7 +72,7 @@ export default function Home() {
           <div className="flex flex-col gap-8">
 
             {/* Row 1: Card left, image right */}
-            <div className="grid grid-cols-2 gap-4 items-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
               <div className="aspect-square">
                 <article
                   className="h-full p-[15%] relative flex flex-col items-center justify-center text-center"
@@ -90,12 +90,9 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Row 2: Image left, card right */}
-            <div className="grid grid-cols-2 gap-4 items-center">
-              <div className="aspect-square flex items-center justify-center">
-                <Image src="/images/recycle.png" alt="Recycling symbol made of jeans" width={300} height={300} className="w-full h-full object-contain" />
-              </div>
-              <div className="aspect-square">
+            {/* Row 2: Image left, card right (card first on mobile) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              <div className="aspect-square order-1 md:order-2">
                 <article
                   className="h-full p-[15%] relative flex flex-col items-center justify-center text-center"
                   style={{ backgroundImage: 'url(/images/paper.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}
@@ -107,10 +104,13 @@ export default function Home() {
                   </div>
                 </article>
               </div>
+              <div className="aspect-square flex items-center justify-center order-2 md:order-1">
+                <Image src="/images/recycle.png" alt="Recycling symbol made of jeans" width={300} height={300} className="w-full h-full object-contain" />
+              </div>
             </div>
 
             {/* Row 3: Card left, image right */}
-            <div className="grid grid-cols-2 gap-4 items-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
               <div className="aspect-square">
                 <article
                   className="h-full p-[15%] relative flex flex-col items-center justify-center text-center"

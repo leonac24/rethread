@@ -44,8 +44,8 @@ export default function RootLayout({
       className={`${inter.variable} ${fraunces.variable} ${jetbrainsMono.variable} ${architectsDaughter.variable}`}
     >
       <body>
-        <a href="/" className="flex justify-center">
-          <Image src="/images/hero.webp" alt="Rethread" width={160} height={160} className="object-contain" />
+        <a href="/" className="relative z-20 flex justify-center mt-4 mb-2 md:-mb-[80px]">
+          <Image src="/images/hero.webp" alt="Rethread" width={100} height={100} className="w-[100px] h-auto object-contain" />
         </a>
         {children}
       </body>

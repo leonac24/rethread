@@ -215,7 +215,7 @@ export function ResultView({ id }: ResultViewProps) {
         <h1 className="font-semibold text-[17px] text-ink">Scan Result</h1>
       </div>
 
-      <div className="px-6 pb-10 pt-4 space-y-3 max-w-2xl mx-auto">
+      <div className="pb-10 pt-4 space-y-3 content-width">
 
         {/* Loading / Error */}
         {!data && !error && (
