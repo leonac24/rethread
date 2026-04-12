@@ -29,6 +29,8 @@ export type RouteOption = {
   name: string;
   address: string;
   distance_km: number;
+  lat?: number;
+  lng?: number;
   hours?: string;
   rating?: number;
   accepts_item: boolean | null;

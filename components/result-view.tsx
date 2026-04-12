@@ -2,7 +2,26 @@
 
 import { useEffect, useState } from 'react';
 
-import type { ScanResult } from '@/types/garment';
+import type { RouteOption, ScanResult } from '@/types/garment';
+
+function mapsUrl(route: RouteOption): string {
+  const query = encodeURIComponent(route.name + ', ' + route.address);
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+function mapSrcdoc(route: RouteOption): string | null {
+  if (route.lat == null || route.lng == null) return null;
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+<style>html,body{margin:0;height:100%}#m{height:100%}.leaflet-control-attribution,.leaflet-control-zoom{display:none!important}</style>
+</head><body><div id="m"></div><script>
+var m=L.map('m',{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false,touchZoom:false}).setView([${route.lat},${route.lng}],15);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd'}).addTo(m);
+var icon=L.icon({iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',iconRetinaUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',shadowUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',iconSize:[25,41],iconAnchor:[12,41],shadowSize:[41,41]});L.marker([${route.lat},${route.lng}],{icon:icon}).addTo(m);
+<\/script></body></html>`;
+}
 
 type ResultViewProps = {
   id: string;
@@ -131,11 +150,11 @@ export function ResultView({ id }: ResultViewProps) {
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-md border border-rule bg-surface p-3">
                   <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Water</p>
-                  <p className="mt-1 text-[18px] text-ink">{Math.round(data.result.cost.water_liters).toLocaleString()} L</p>
+                  <p className="mt-1 text-[18px] text-ink">{Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()} gal</p>
                 </div>
                 <div className="rounded-md border border-rule bg-surface p-3">
                   <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">CO2</p>
-                  <p className="mt-1 text-[18px] text-ink">{data.result.cost.co2_kg.toFixed(1)} kg</p>
+                  <p className="mt-1 text-[18px] text-ink">{(data.result.cost.co2_kg * 2.20462).toFixed(1)} lb</p>
                 </div>
                 <div className="rounded-md border border-rule bg-surface p-3">
                   <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Dye Risk</p>
@@ -162,17 +181,44 @@ export function ResultView({ id }: ResultViewProps) {
             <section className="rounded-md border border-rule bg-bg p-4">
               <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted">Next Routes</p>
               <div className="mt-3 space-y-2">
-                {data.result.routes.map((route) => (
-                  <article
-                    key={`${route.kind}-${route.name}`}
-                    className="rounded-md border border-rule bg-surface p-3"
-                  >
-                    <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">{route.kind}</p>
-                    <p className="mt-1 text-[15px] text-ink">{route.name}</p>
-                    <p className="mt-1 text-[13px] text-ink-muted">{route.address}</p>
-                    <p className="mt-1 text-[13px] text-ink-muted">{route.distance_km.toFixed(1)} km away</p>
-                  </article>
-                ))}
+                {data.result.routes.map((route) => {
+                  const srcdoc = mapSrcdoc(route);
+                  const hasLocation = route.lat != null && route.lng != null;
+                  return (
+                    <article
+                      key={`${route.kind}-${route.name}`}
+                      className="rounded-md border border-rule bg-surface overflow-hidden"
+                    >
+                      {srcdoc ? (
+                        <iframe
+                          srcDoc={srcdoc}
+                          sandbox="allow-scripts"
+                          className="w-full h-[120px] border-0 pointer-events-none"
+                          loading="lazy"
+                          title={`Map showing ${route.name}`}
+                        />
+                      ) : null}
+                      <div className="p-3">
+                        <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">{route.kind}</p>
+                        <p className="mt-1 text-[15px] text-ink">{route.name}</p>
+                        <p className="mt-1 text-[13px] text-ink-muted">{route.address}</p>
+                        <div className="mt-1 flex items-center justify-between">
+                          <p className="text-[13px] text-ink-muted">{(route.distance_km * 0.621371).toFixed(1)} mi away</p>
+                          {hasLocation ? (
+                            <a
+                              href={mapsUrl(route)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[13px] text-ink-muted transition-colors hover:text-ink"
+                            >
+                              Open in Maps ›
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </section>
 

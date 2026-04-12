@@ -101,6 +101,8 @@ async function nearest(
       place.location.latitude,
       place.location.longitude,
     ),
+    lat: place.location.latitude,
+    lng: place.location.longitude,
     hours: place.currentOpeningHours?.weekdayDescriptions?.[todayIndex()],
     rating: place.rating,
     accepts_item: acceptsItem(kind, category, place.types ?? []),
