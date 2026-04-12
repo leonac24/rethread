@@ -8,7 +8,7 @@ Rethread is a Next.js app that turns a single photo of a clothing label into a c
 
 ## What it does
 
-1. **Scan** — user snaps a photo of a care label (or drops in a receipt).
+1. **Scan** — user snaps a photo of a care label.
 2. **Reason** — Gemini computes the garment's fiber-to-landfill footprint from the extracted data.
 3. **Route** — the app returns the three nearest places to repair, resell, or donate it.
 
@@ -135,11 +135,13 @@ rethread/
 ## Environment
 
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS_JSON=   # service account (inline)
+GOOGLE_APPLICATION_CREDENTIALS_FILE=   # absolute path to local service-account json
+GOOGLE_CLOUD_PROJECT=rethread-tag-ingestion
+GOOGLE_APPLICATION_CREDENTIALS_JSON=   # optional inline service account json
 GEMINI_API_KEY=
 GOOGLE_MAPS_API_KEY=
 DOCAI_PROCESSOR_ID=
-BIGQUERY_DATASET=rethread.brand_ratings
+BIGQUERY_DATASET=rethread-tag-ingestion.brand_ratings
 ```
 
 ---
