@@ -99,6 +99,12 @@ export function ResultView({ id }: ResultViewProps) {
                   <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">Brand</p>
                   <p className="mt-1 text-[15px] text-ink">{data.result.garment.brand ?? 'Unknown'}</p>
                 </div>
+                {data.result.garment.color ? (
+                  <div>
+                    <p className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">Color</p>
+                    <p className="mt-1 text-[15px] text-ink">{data.result.garment.color}</p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-3">
@@ -140,6 +146,17 @@ export function ResultView({ id }: ResultViewProps) {
                 Confidence: {data.result.cost.confidence}
               </p>
               <p className="mt-2 text-[14px] leading-[22px] text-ink">{data.result.cost.reasoning}</p>
+              {data.result.cost.dye_type ? (
+                <div className="mt-4 rounded-md border border-rule bg-surface p-3">
+                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Dye Type</p>
+                  <p className="mt-1 text-[15px] text-ink">{data.result.cost.dye_type}</p>
+                  {data.result.cost.dye_reasoning ? (
+                    <p className="mt-2 text-[13px] leading-[20px] text-ink-muted">
+                      {data.result.cost.dye_reasoning}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </section>
 
             <section className="rounded-md border border-rule bg-bg p-4">

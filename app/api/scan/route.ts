@@ -1,4 +1,4 @@
-import { computeCost } from '@/lib/google/gemini';
+import { analyzeGarmentImage, computeCost } from '@/lib/google/gemini';
 import { findRoutes } from '@/lib/google/places';
 import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/vision';
 import { saveScanResult } from '@/lib/scan-store';
@@ -33,9 +33,13 @@ function fallbackRoutes(): [RouteOption, RouteOption, RouteOption] {
 export async function POST(request: Request) {
   const formData = await request.formData();
   const files = formData.getAll('photo');
+  const garmentPhotoFile = formData.get('garment_photo');
 
-  if (!files.length) {
-    return Response.json({ error: 'Missing image file in field "photo".' }, { status: 400 });
+  if (!files.length && !(garmentPhotoFile instanceof File)) {
+    return Response.json(
+      { error: 'Provide at least one tag photo or a garment photo.' },
+      { status: 400 },
+    );
   }
 
   for (const file of files) {
@@ -43,13 +47,25 @@ export async function POST(request: Request) {
       return Response.json({ error: 'All uploaded files must be images.' }, { status: 400 });
     }
   }
+  const garmentPhotoBuffer =
+    garmentPhotoFile instanceof File && garmentPhotoFile.type.startsWith('image/')
+      ? Buffer.from(await garmentPhotoFile.arrayBuffer())
+      : null;
 
-  const texts = await Promise.all(
-    (files as File[]).map(async (file) => {
-      const image = Buffer.from(await file.arrayBuffer());
-      return readClothingLabelText(image);
-    }),
-  );
+  const [texts, imageAnalysis] = await Promise.all([
+    Promise.all(
+      (files as File[]).map(async (file) => {
+        const image = Buffer.from(await file.arrayBuffer());
+        return readClothingLabelText(image);
+      }),
+    ),
+    garmentPhotoBuffer
+      ? analyzeGarmentImage(garmentPhotoBuffer).catch((err) => {
+          console.error('[scan] garment image analysis failed:', err);
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
 
   const text = texts.join('\n');
   const parsed = parseClothingLabelText(text);
@@ -57,8 +73,10 @@ export async function POST(request: Request) {
   const garment: ScanResult['garment'] = {
     fibers: parsed.fibers ?? [],
     origin: parsed.origin ?? null,
-    category: parsed.category ?? null,
+    // Image-detected category takes precedence over tag-inferred
+    category: parsed.category ?? imageAnalysis?.category ?? null,
     ...(parsed.brand ? { brand: parsed.brand } : {}),
+    ...(imageAnalysis?.color ? { color: imageAnalysis.color } : {}),
   };
 
   const costPromise: Promise<ScanResult['cost']> = computeCost(garment).catch(

@@ -9,6 +9,7 @@ export type Garment = {
   category: string | null;
   brand?: string;
   price?: number;
+  color?: string;
 };
 
 export type EnvironmentalCost = {
@@ -17,6 +18,8 @@ export type EnvironmentalCost = {
   dye_pollution_score: number;
   confidence: 'high' | 'medium' | 'low';
   reasoning: string;
+  dye_type?: string;
+  dye_reasoning?: string;
 };
 
 export type RouteKind = 'repair' | 'resale' | 'donation';

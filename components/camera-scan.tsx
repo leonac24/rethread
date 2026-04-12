@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { ScanResult } from '@/types/garment';
@@ -28,27 +28,108 @@ function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
   });
 }
 
+type UploadDropdownProps = {
+  disabled?: boolean;
+  multiple?: boolean;
+  onFiles: (files: File[]) => void;
+};
+
+function UploadDropdown({ disabled, multiple, onFiles }: UploadDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const libraryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length) onFiles(files);
+    event.target.value = '';
+    setOpen(false);
+  }
+
+  function pick(ref: React.RefObject<HTMLInputElement | null>) {
+    ref.current?.click();
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        className="w-full rounded-md border border-dashed border-rule bg-bg px-4 py-4 text-[14px] text-ink-muted transition-colors hover:bg-surface-sunk disabled:opacity-60"
+      >
+        Add photo
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-xl bg-[#1c1c1e] shadow-xl">
+          <button
+            type="button"
+            onClick={() => pick(libraryRef)}
+            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10"
+          >
+            <span>Photo Library</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
+          <div className="mx-4 h-px bg-white/10" />
+          <button
+            type="button"
+            onClick={() => pick(cameraRef)}
+            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10"
+          >
+            <span>Take Photo</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+            </svg>
+          </button>
+          <div className="mx-4 h-px bg-white/10" />
+          <button
+            type="button"
+            onClick={() => pick(fileRef)}
+            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10"
+          >
+            <span>Choose File</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      <input ref={libraryRef} type="file" accept="image/*" multiple={multiple} onChange={handleChange} className="sr-only" />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleChange} className="sr-only" />
+      <input ref={fileRef} type="file" multiple={multiple} onChange={handleChange} className="sr-only" />
+    </div>
+  );
+}
+
 export function CameraScan() {
   const router = useRouter();
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [garmentPhoto, setGarmentPhoto] = useState<File | null>(null);
   const [staged, setStaged] = useState<File[]>([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    if (!files.length) return;
-    setStaged((prev) => [...prev, ...files]);
-    event.target.value = '';
-  }
 
   function removeStaged(index: number) {
     setStaged((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleScan() {
-    if (!staged.length) return;
+    if (!staged.length && !garmentPhoto) return;
 
     setError('');
     setIsLoading(true);
@@ -58,6 +139,9 @@ export function CameraScan() {
       console.log('[scan] geolocation result:', coords);
 
       const formData = new FormData();
+      if (garmentPhoto) {
+        formData.append('garment_photo', garmentPhoto);
+      }
       for (const file of staged) {
         formData.append('photo', file);
       }
@@ -91,107 +175,100 @@ export function CameraScan() {
     } finally {
       setIsLoading(false);
       setStaged([]);
+      setGarmentPhoto(null);
     }
   }
 
-  function openCamera() {
-    cameraInputRef.current?.click();
-  }
-
-  function openUpload() {
-    uploadInputRef.current?.click();
-  }
+  const canScan = (staged.length > 0 || garmentPhoto !== null) && !isLoading;
+  const totalQueued = staged.length + (garmentPhoto ? 1 : 0);
 
   return (
     <main className="min-h-screen bg-bg px-4 py-6 flex items-start justify-center">
-      <section className="w-full max-w-md rounded-lg border border-rule bg-surface p-4 shadow-sm sm:p-5">
-        <p className="mb-4 text-[13px] leading-[20px] text-ink-muted">
-          Upload images of every tag attached to your clothing item, including brand, size, and care labels - the more tags the better the results! If you allow location access, we can also provide insights on nearby sustainable clothing recycling options.
-        </p>
+      <div className="w-full max-w-2xl space-y-4">
 
-        <div className="grid grid-cols-1 gap-3">
-          <button
-            type="button"
-            onClick={openCamera}
-            disabled={isLoading}
-            className="rounded-md border border-rule bg-bg px-4 py-5 text-left transition-colors hover:bg-surface-sunk disabled:opacity-60"
-          >
-            <span className="block text-[14px] font-medium text-ink">Open camera</span>
-          </button>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
-          <button
-            type="button"
-            onClick={openUpload}
-            disabled={isLoading}
-            className="rounded-md border border-rule bg-bg px-4 py-5 text-left transition-colors hover:bg-surface-sunk disabled:opacity-60"
-          >
-            <span className="block text-[14px] font-medium text-ink">Upload images</span>
-          </button>
+          {/* Garment image */}
+          <section className="rounded-lg border border-rule bg-surface p-4">
+            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">Garment</p>
+            <p className="mt-2 text-[13px] leading-[19px] text-ink-muted">
+              Upload a photo of the clothing item itself. We'll detect the garment type and color to identify the likely dye and its environmental impact.
+            </p>
+            <div className="mt-4">
+              {garmentPhoto ? (
+                <div className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2">
+                  <span className="truncate text-[14px] text-ink">{garmentPhoto.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setGarmentPhoto(null)}
+                    disabled={isLoading}
+                    className="ml-3 shrink-0 text-[13px] text-ink-muted hover:text-danger disabled:opacity-40"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <UploadDropdown
+                  disabled={isLoading}
+                  multiple={false}
+                  onFiles={(files) => setGarmentPhoto(files[0])}
+                />
+              )}
+            </div>
+          </section>
+
+          {/* Tag images */}
+          <section className="rounded-lg border border-rule bg-surface p-4">
+            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">Tags</p>
+            <p className="mt-2 text-[13px] leading-[19px] text-ink-muted">
+              Upload every tag on the item — brand, size, and care labels. The more tags, the more accurate the fiber and origin analysis.
+            </p>
+            <div className="mt-4 space-y-2">
+              <UploadDropdown
+                disabled={isLoading}
+                multiple
+                onFiles={(files) => setStaged((prev) => [...prev, ...files])}
+              />
+              {staged.map((file, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2"
+                >
+                  <span className="truncate text-[13px] text-ink">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeStaged(i)}
+                    disabled={isLoading}
+                    className="ml-3 shrink-0 text-[12px] text-ink-muted hover:text-danger disabled:opacity-40"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
 
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleFilesSelected}
-          className="sr-only"
-          aria-label="Capture a tag photo"
-        />
+        {isLoading ? (
+          <button
+            type="button"
+            disabled
+            className="w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium opacity-60"
+          >
+            Scanning...
+          </button>
+        ) : canScan ? (
+          <button
+            type="button"
+            onClick={handleScan}
+            className="w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium"
+          >
+            Scan {totalQueued} image{totalQueued === 1 ? '' : 's'}
+          </button>
+        ) : null}
 
-        <input
-          ref={uploadInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFilesSelected}
-          className="sr-only"
-          aria-label="Upload tag photos"
-        />
-
-        {staged.length > 0 && (
-          <div className="mt-4 space-y-2">
-            <p className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">
-              Queued ({staged.length})
-            </p>
-            {staged.map((file, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2"
-              >
-                <span className="truncate text-[14px] text-ink">{file.name}</span>
-                <button
-                  type="button"
-                  onClick={() => removeStaged(i)}
-                  disabled={isLoading}
-                  className="ml-3 shrink-0 text-[13px] text-ink-muted hover:text-danger disabled:opacity-40"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={handleScan}
-              disabled={isLoading}
-              className="mt-1 w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium disabled:opacity-60"
-            >
-              {isLoading ? 'Scanning...' : `Scan ${staged.length} tag${staged.length === 1 ? '' : 's'}`}
-            </button>
-          </div>
-        )}
-
-        {staged.length === 0 && !isLoading && (
-          <div className="mt-4 min-h-24 rounded-md border border-rule bg-bg p-4">
-            {error ? (
-              <p className="text-[14px] text-danger">{error}</p>
-            ) : (
-              <p className="text-[14px] text-ink-muted">Upload images to get started.</p>
-            )}
-          </div>
-        )}
-      </section>
+        {error && <p className="text-[14px] text-danger">{error}</p>}
+      </div>
     </main>
   );
 }
