@@ -185,7 +185,7 @@ export function CameraScan() {
     <main className="min-h-screen bg-bg px-4 py-6 flex items-center justify-center">
       <div className="w-full max-w-2xl space-y-4">
 
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-2 gap-x-[80px] gap-y-6">
 
           {/* Garment */}
           <div className="flex flex-col items-center gap-3">
@@ -198,7 +198,7 @@ export function CameraScan() {
               {/* Frame overlay */}
               <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
               {/* Description at bottom of frame */}
-              <div className="absolute bottom-0 left-0 right-0 z-20 pb-3 text-center" style={{ paddingLeft: '15%', paddingRight: '15%', bottom: '20px' }}>
+              <div className="absolute bottom-0 left-0 right-0 z-20 pb-3 text-center" style={{ paddingLeft: '15%', paddingRight: '15%', bottom: '10px' }}>
                 <p style={{ fontFamily: 'var(--font-handwriting)' }} className="text-[12px] leading-[17px] sm:text-[18px] sm:leading-[24px] text-ink-muted">Upload a photo of the clothing item. We'll detect the garment type and color.</p>
               </div>
             </div>
@@ -226,7 +226,7 @@ export function CameraScan() {
               {/* Frame overlay */}
               <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
               {/* Description at bottom of frame */}
-              <div className="absolute bottom-0 left-0 right-0 z-20 pb-3 text-center" style={{ paddingLeft: '15%', paddingRight: '15%', bottom: '20px' }}>
+              <div className="absolute bottom-0 left-0 right-0 z-20 pb-3 text-center" style={{ paddingLeft: '15%', paddingRight: '15%', bottom: '10px' }}>
                 <p style={{ fontFamily: 'var(--font-handwriting)' }} className="text-[12px] leading-[17px] sm:text-[18px] sm:leading-[24px] text-ink-muted">Upload every tag — brand, size, and care labels for accurate analysis.</p>
               </div>
             </div>

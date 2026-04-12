@@ -1,16 +1,17 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import {
   PieChart,
   Pie,
   Cell,
   Tooltip,
+  ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
   YAxis,
-  ResponsiveContainer,
 } from 'recharts';
 import type { RouteOption, ScanResult } from '@/types/garment';
 
@@ -18,6 +19,39 @@ function truncate(text: string, maxWords: number): string {
   const words = text.split(/\s+/);
   if (words.length <= maxWords) return text;
   return words.slice(0, maxWords).join(' ') + '...';
+}
+
+const COUNTRY_COORDS: Record<string, [number, number]> = {
+  'usa': [38, -97], 'united states': [38, -97], 'us': [38, -97], 'america': [38, -97],
+  'china': [35, 105], 'bangladesh': [23.7, 90.4], 'india': [20, 77],
+  'vietnam': [14, 108], 'cambodia': [12.5, 104.9], 'indonesia': [-0.8, 113.9],
+  'pakistan': [30, 70], 'turkey': [38.9, 35.2], 'mexico': [23.6, -102.5],
+  'sri lanka': [7.9, 80.8], 'ethiopia': [9.1, 40.5], 'portugal': [39.4, -8.2],
+  'italy': [41.9, 12.6], 'france': [46.2, 2.2], 'germany': [51.2, 10.4],
+  'uk': [51.5, -0.1], 'united kingdom': [51.5, -0.1], 'japan': [36.2, 138.3],
+  'south korea': [35.9, 127.8], 'korea': [35.9, 127.8], 'taiwan': [23.7, 121],
+  'thailand': [15.9, 100.9], 'malaysia': [4.2, 108], 'myanmar': [19.2, 96.7],
+  'morocco': [31.8, -7.1], 'peru': [-9.2, -75], 'brazil': [-14.2, -51.9],
+  'colombia': [4.6, -74.1], 'honduras': [15.2, -86.2], 'guatemala': [15.8, -90.2],
+  'el salvador': [13.8, -88.9], 'haiti': [18.9, -72.3], 'egypt': [26, 30],
+  'philippines': [12.9, 121.8], 'nepal': [28.4, 84.1],
+};
+
+function countryMapSrcdoc(country: string): string | null {
+  const coords = COUNTRY_COORDS[country.toLowerCase().trim()];
+  if (!coords) return null;
+  const [lat, lng] = coords;
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+<style>html,body{margin:0;height:100%}#m{height:100%}.leaflet-control-attribution,.leaflet-control-zoom{display:none!important}</style>
+</head><body><div id="m"></div><script>
+var m=L.map('m',{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false,touchZoom:false}).setView([${lat},${lng}],2);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd'}).addTo(m);
+var icon=L.icon({iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',iconRetinaUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',shadowUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',iconSize:[18,30],iconAnchor:[9,30],shadowSize:[30,30]});
+L.marker([${lat},${lng}],{icon:icon}).addTo(m);
+<\/script></body></html>`;
 }
 
 function mapsUrl(route: RouteOption): string {
@@ -98,6 +132,19 @@ function Card({ children, className = '', style }: { children: React.ReactNode; 
   );
 }
 
+function colorToCSS(name: string): string {
+  const map: Record<string, string> = {
+    'navy blue': 'navy', 'light blue': 'lightblue', 'dark green': 'darkgreen',
+    'light green': 'lightgreen', 'dark red': 'darkred', 'hot pink': 'hotpink',
+    'sky blue': 'skyblue', 'olive green': 'olive', 'forest green': 'forestgreen',
+    'baby blue': 'lightblue', 'dark grey': 'darkgray', 'dark gray': 'darkgray',
+    'light grey': 'lightgray', 'light gray': 'lightgray', 'off white': 'ivory',
+  };
+  const lower = name.toLowerCase();
+  return map[lower] ?? lower.replace(/\s+/g, '');
+}
+
+
 type ResultViewProps = {
   id: string;
 };
@@ -168,7 +215,7 @@ export function ResultView({ id }: ResultViewProps) {
         <h1 className="font-semibold text-[17px] text-ink">Scan Result</h1>
       </div>
 
-      <div className="px-4 pb-10 pt-4 space-y-3 max-w-lg mx-auto">
+      <div className="px-6 pb-10 pt-4 space-y-3 max-w-2xl mx-auto">
 
         {/* Loading / Error */}
         {!data && !error && (
@@ -180,50 +227,87 @@ export function ResultView({ id }: ResultViewProps) {
 
         {data && (
           <>
-            {/* Image previews */}
-            {data.previews?.length ? (
-              <div className="flex gap-3 overflow-x-auto pb-1">
-                {data.previews.map((src, i) => (
-                  <img
-                    key={i}
-                    src={src}
-                    alt={`Upload ${i + 1}`}
-                    className="h-[120px] w-auto rounded-xl border border-rule object-contain flex-shrink-0"
-                  />
-                ))}
-              </div>
-            ) : null}
+            {/* ── Garment Hero ─────────────────────────────────────── */}
+            <Card className="relative overflow-hidden">
+              {/* Watermark category text */}
+              {data.result.garment.category && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                  <span
+                    className="font-display font-bold text-ink select-none whitespace-nowrap"
+                    style={{ fontSize: 72, opacity: 0.04, transform: 'rotate(-8deg)' }}
+                  >
+                    {data.result.garment.category}
+                  </span>
+                </div>
+              )}
 
-            {/* ── Garment ─────────────────────────────────────────── */}
-            <Card>
               <SectionLabel>Garment</SectionLabel>
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div>
+
+              <div className="flex gap-4 items-start relative z-10">
+                {/* Polaroid frame with photo */}
+                {data.previews?.length ? (
+                  <div className="flex-shrink-0 relative w-[200px]" style={{ transform: 'rotate(-3deg)' }}>
+                    <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '8%', paddingBottom: '28%', paddingLeft: '10%', paddingRight: '10%' }}>
+                      <img src={data.previews[0]} alt="Garment" className="w-full h-full object-cover" />
+                    </div>
+                    <Image src="/images/frame.png" alt="" width={300} height={350} className="relative z-10 w-full h-auto" />
+                  </div>
+                ) : null}
+
+                {/* Details */}
+                <div className="flex-1 min-w-0">
                   <p className="text-[22px] font-bold text-ink leading-tight">
                     {data.result.garment.category ?? 'Unknown'}
                   </p>
                   <p className="text-[14px] text-ink-muted mt-0.5">{data.result.garment.brand ?? 'Unknown brand'}</p>
+
+                  {data.result.garment.color && (
+                    <div className="flex items-center gap-2 mt-3">
+                      <div
+                        className="w-4 h-4 rounded-full border border-rule flex-shrink-0"
+                        style={{ backgroundColor: colorToCSS(data.result.garment.color) }}
+                      />
+                      <span className="text-[12px] text-ink-muted">{data.result.garment.color}</span>
+                    </div>
+                  )}
+
+                  {data.result.garment.origin && (
+                    <>
+                      <div className="flex items-center gap-2 mt-2">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint flex-shrink-0">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                        </svg>
+                        <p className="text-[13px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
+                      </div>
+                      {countryMapSrcdoc(data.result.garment.origin) && (
+                        <iframe
+                          srcDoc={countryMapSrcdoc(data.result.garment.origin)!}
+                          sandbox="allow-scripts"
+                          className="w-full mt-3 rounded-lg border-0 pointer-events-none"
+                          style={{ height: 100 }}
+                          loading="lazy"
+                          title={`Map of ${data.result.garment.origin}`}
+                        />
+                      )}
+                    </>
+                  )}
                 </div>
-                {data.result.garment.color && (
-                  <span className="inline-flex items-center rounded-full bg-surface-sunk px-3 py-1 text-[12px] text-ink-muted font-medium flex-shrink-0">
-                    {data.result.garment.color}
-                  </span>
-                )}
               </div>
-              {data.result.garment.origin && (
-                <div className="flex items-center gap-2 pt-3 border-t border-rule">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                  </svg>
-                  <p className="text-[13px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
+
+              {/* Extra previews if more than one */}
+              {data.previews && data.previews.length > 1 && (
+                <div className="flex gap-2 mt-4 overflow-x-auto">
+                  {data.previews.slice(1).map((src, i) => (
+                    <img key={i} src={src} alt={`Tag ${i + 1}`} className="h-[64px] w-auto rounded-lg object-contain flex-shrink-0 border border-rule" />
+                  ))}
                 </div>
               )}
             </Card>
 
             {/* ── Fiber Composition ───────────────────────────────── */}
             {fiberData.length > 0 && (
-              <Card>
-                <SectionLabel>Fiber Composition</SectionLabel>
+              <Card style={{ backgroundImage: 'url(/images/burlap.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: 'none', backgroundColor: 'transparent' }}>
+                <SectionLabel><span className="text-ink bg-white px-1">Fiber Composition</span></SectionLabel>
                 <div style={{ height: 180 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -261,8 +345,8 @@ export function ResultView({ id }: ResultViewProps) {
                   {fiberData.map((d, i) => (
                     <span
                       key={d.name}
-                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-ink"
-                      style={{ backgroundColor: FIBER_COLORS[i % FIBER_COLORS.length] }}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold text-ink"
+                      style={{ backgroundColor: 'white' }}
                     >
                       <span
                         className="inline-block w-2 h-2 rounded-full flex-shrink-0"
@@ -279,58 +363,50 @@ export function ResultView({ id }: ResultViewProps) {
             <Card>
               <SectionLabel>Environmental Impact</SectionLabel>
 
-              {/* Water + CO2 */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="rounded-xl bg-bg p-4">
-                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint mb-2">Water</p>
-                  <p className="text-[26px] font-bold text-ink leading-none">
+              {/* Water + CO2 ripped paper cards */}
+              <div className="grid grid-cols-2 gap-[34px] mb-4">
+                <div
+                  className="p-6 text-center"
+                  style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(-1.5deg)' }}
+                >
+                  <p className="text-[9px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
+                  <p className="text-[20px] font-bold text-ink leading-none">
                     {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
                   </p>
-                  <p className="text-[12px] text-ink-muted mt-1">gallons</p>
+                  <p className="text-[9px] text-ink font-medium mt-1">gallons</p>
                 </div>
-                <div className="rounded-xl bg-bg p-4">
-                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint mb-2">CO₂</p>
-                  <p className="text-[26px] font-bold text-ink leading-none">
+                <div
+                  className="p-6 text-center"
+                  style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(1.2deg)' }}
+                >
+                  <p className="text-[9px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
+                  <p className="text-[20px] font-bold text-ink leading-none">
                     {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
                   </p>
-                  <p className="text-[12px] text-ink-muted mt-1">pounds</p>
+                  <p className="text-[9px] text-ink font-medium mt-1">pounds</p>
                 </div>
               </div>
 
-              {/* Dye Risk */}
+              {/* Dye risk bar chart */}
               <div className="rounded-xl bg-bg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">Dye Risk</p>
-                  <span className="text-[20px] font-bold text-ink leading-none">
-                    {dyeScore}<span className="text-[13px] font-normal text-ink-muted"> / 10</span>
-                  </span>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Dye Risk</p>
+                  <span className="text-[13px] font-bold" style={{ color: dyeColor }}>{dyeScore}/10</span>
                 </div>
-                <div style={{ height: 24 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={[{ filled: dyeScore, empty: 10 - dyeScore }]}
-                      layout="vertical"
-                      margin={{ top: 2, right: 0, bottom: 2, left: 0 }}
-                      barSize={18}
-                    >
-                      <XAxis type="number" domain={[0, 10]} hide />
-                      <YAxis type="category" hide />
-                      <Bar dataKey="filled" stackId="a" fill={dyeColor} radius={dyeScore === 10 ? [6, 6, 6, 6] : [6, 0, 0, 6]} isAnimationActive={false} />
-                      <Bar dataKey="empty" stackId="a" fill="#ECE8DF" radius={dyeScore === 0 ? [6, 6, 6, 6] : [0, 6, 6, 0]} isAnimationActive={false} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <ResponsiveContainer width="100%" height={52}>
+                  <BarChart data={[{ value: dyeScore }]} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                    <XAxis type="number" domain={[0, 10]} hide />
+                    <YAxis type="category" dataKey="value" hide />
+                    <Bar dataKey="value" fill={dyeColor} radius={4} background={{ fill: 'rgba(20,22,26,0.07)', radius: 4 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+                {data.result.cost.dye_type && (
+                  <p className="text-[12px] font-medium text-ink mt-2">{data.result.cost.dye_type}</p>
+                )}
+                {data.result.cost.dye_reasoning && (
+                  <p className="text-[11px] leading-[17px] text-ink-muted mt-1">{data.result.cost.dye_reasoning}</p>
+                )}
               </div>
-
-              {/* Dye type */}
-              {data.result.cost.dye_type && (
-                <div className="mt-3 pt-3 border-t border-rule">
-                  <p className="text-[12px] font-medium text-ink">{data.result.cost.dye_type}</p>
-                  {data.result.cost.dye_reasoning && (
-                    <p className="text-[12px] leading-[18px] text-ink-muted mt-1">{data.result.cost.dye_reasoning}</p>
-                  )}
-                </div>
-              )}
 
               <div className="mt-3 pt-3 border-t border-rule">
                 <p className="text-[12px] leading-[19px] text-ink-muted">{truncate(data.result.cost.reasoning, 50)}</p>
@@ -394,13 +470,17 @@ export function ResultView({ id }: ResultViewProps) {
               </div>
             </Card>
 
-            {/* ── Raw OCR Text (collapsible) ────────────────────────── */}
-            <Card className="!p-0 overflow-hidden">
+            {/* ── Raw OCR Text (receipt) ───────────────────────────── */}
+            <div className="flex justify-center">
+            <div
+              className="overflow-hidden w-64"
+              style={{ backgroundImage: 'url(/images/receipt.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+            >
               <button
                 onClick={() => setOcrOpen((v) => !v)}
-                className="flex w-full items-center justify-between px-5 py-4 hover:bg-surface-sunk transition-colors"
+                className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:brightness-95"
               >
-                <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-muted">Raw OCR Text</p>
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-ink-muted">— Care Label OCR —</p>
                 <svg
                   width="14" height="14" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -411,13 +491,16 @@ export function ResultView({ id }: ResultViewProps) {
                 </svg>
               </button>
               {ocrOpen && (
-                <div className="border-t border-rule px-5 pb-5 pt-4">
-                  <pre className="whitespace-pre-wrap font-mono text-[12px] leading-[20px] text-ink-muted">
+                <div className="px-5 pb-6 pt-1">
+                  <div className="border-t border-dashed border-ink/20 mb-4" />
+                  <pre className="whitespace-pre-wrap font-mono text-[11px] leading-[20px] text-ink">
                     {data.text || 'No text detected.'}
                   </pre>
+                  <div className="border-t border-dashed border-ink/20 mt-4" />
                 </div>
               )}
-            </Card>
+            </div>
+            </div>
           </>
         )}
       </div>
