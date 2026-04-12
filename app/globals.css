@@ -31,22 +31,11 @@
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #0D1014;
-    --color-surface: #161A21;
-    --color-surface-sunk: #0A0D11;
-    --color-ink: #ECE8DF;
-    --color-ink-muted: #8A919C;
-    --color-rule: rgba(236, 232, 223, 0.12);
-    --color-accent-500: #8EC2E0;
-  }
-}
-
 html,
 body {
   background: var(--color-bg);
   color: var(--color-ink);
+  color-scheme: light;
 }
 
 body {
