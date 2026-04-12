@@ -6,3 +6,9 @@ out
 *.log
 .vercel
 next-env.d.ts
+
+# Use bun exclusively — block other package managers' lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.scan-cache/
