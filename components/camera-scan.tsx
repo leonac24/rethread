@@ -30,12 +30,13 @@ function getCurrentCoords(): Promise<{ lat: number; lng: number } | null> {
 }
 
 type UploadDropdownProps = {
+  label?: string;
   disabled?: boolean;
   multiple?: boolean;
   onFiles: (files: File[]) => void;
 };
 
-function UploadDropdown({ disabled, multiple, onFiles }: UploadDropdownProps) {
+function UploadDropdown({ label = 'Add photo', disabled, multiple, onFiles }: UploadDropdownProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
@@ -69,9 +70,9 @@ function UploadDropdown({ disabled, multiple, onFiles }: UploadDropdownProps) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
-        className="w-full h-11 rounded-md bg-ink text-bg text-[14px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+        className="w-full h-11 rounded-md bg-ink text-bg text-[14px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50 cursor-pointer disabled:cursor-default"
       >
-        Add photo
+        {label}
       </button>
 
       {open && (
@@ -79,7 +80,7 @@ function UploadDropdown({ disabled, multiple, onFiles }: UploadDropdownProps) {
           <button
             type="button"
             onClick={() => pick(libraryRef)}
-            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10"
+            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10 cursor-pointer"
           >
             <span>Photo Library</span>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
@@ -90,7 +91,7 @@ function UploadDropdown({ disabled, multiple, onFiles }: UploadDropdownProps) {
           <button
             type="button"
             onClick={() => pick(cameraRef)}
-            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10"
+            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10 cursor-pointer"
           >
             <span>Take Photo</span>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
@@ -101,7 +102,7 @@ function UploadDropdown({ disabled, multiple, onFiles }: UploadDropdownProps) {
           <button
             type="button"
             onClick={() => pick(fileRef)}
-            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10"
+            className="flex w-full items-center justify-between px-4 py-3.5 text-[15px] text-white transition-colors hover:bg-white/10 cursor-pointer"
           >
             <span>Choose File</span>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
@@ -124,6 +125,7 @@ export function CameraScan() {
   const [staged, setStaged] = useState<File[]>([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [stagedListOpen, setStagedListOpen] = useState(false);
 
   useEffect(() => {
     router.prefetch('/scanning');
@@ -182,89 +184,97 @@ export function CameraScan() {
   const totalQueued = staged.length + (garmentPhoto ? 1 : 0);
 
   return (
-    <main className="min-h-screen bg-bg py-2 flex items-start justify-center pt-[15vh]">
-      <div className="content-width space-y-4">
+    <main className="min-h-screen bg-bg py-6 flex items-start justify-center pt-[8vh] sm:pt-[15vh]">
+      <div className="w-[52%] max-w-[240px] sm:w-[37%] sm:max-w-none mx-auto space-y-10">
 
-        <div className="grid grid-cols-2 items-start gap-x-[40px] gap-y-3 max-w-[49%] mx-auto">
+        <div className="flex flex-col items-center gap-6 sm:grid sm:grid-cols-2 sm:items-start sm:gap-x-[40px] sm:gap-y-3">
 
           {/* Garment */}
-          <div className="flex flex-col items-center gap-3">
-            {/* Frame with garment inside */}
+          <div className="flex flex-col items-center gap-3 w-full">
             <div className="relative w-[130%] -mx-[15%] mb-[10px]">
-              {/* Garment image inside frame opening */}
               <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '0%', paddingBottom: '16%', paddingLeft: '2%', paddingRight: '2%', transform: 'scale(1.3)', transformOrigin: 'center center' }}>
                 <Image src="/images/garment.png" alt="Garment" width={200} height={200} className="w-full h-full object-contain" />
               </div>
-              {/* Frame overlay */}
               <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
-              {/* Label at bottom of frame */}
               <div className="absolute bottom-0 left-0 right-0 z-20 pb-3 text-center" style={{ paddingLeft: '5%', paddingRight: '5%', bottom: '10px' }}>
                 <p style={{ fontFamily: 'var(--font-handwriting)' }} className="text-[12px] leading-[17px] sm:text-[18px] sm:leading-[24px] text-ink-muted">Upload Garment</p>
               </div>
             </div>
-            {/* Upload button separate */}
             <div className="w-full">
               {garmentPhoto ? (
                 <div className="flex w-full items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 h-11">
                   <span className="truncate text-[13px] text-ink">{garmentPhoto.name}</span>
-                  <button type="button" onClick={() => setGarmentPhoto(null)} disabled={isLoading} className="ml-3 shrink-0 text-[12px] text-ink-muted hover:text-danger disabled:opacity-40">Remove</button>
+                  <button type="button" onClick={() => setGarmentPhoto(null)} disabled={isLoading} className="ml-2 shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
                 </div>
               ) : (
-                <UploadDropdown disabled={isLoading} multiple={false} onFiles={(files) => setGarmentPhoto(files[0])} />
+                <UploadDropdown label="Upload Garment" disabled={isLoading} multiple={false} onFiles={(files) => setGarmentPhoto(files[0])} />
               )}
             </div>
           </div>
 
           {/* Tags */}
-          <div className="flex flex-col items-center gap-3">
-            {/* Frame with tag inside */}
+          <div className="flex flex-col items-center gap-3 w-full">
             <div className="relative w-[130%] -mx-[15%] mb-[10px]">
-              {/* Tag image inside frame opening */}
               <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '0%', paddingBottom: '16%', paddingLeft: '2%', paddingRight: '2%', transform: 'scale(1.3) translateY(20px)', transformOrigin: 'center center' }}>
                 <Image src="/images/tag.png" alt="Tag" width={200} height={200} className="w-full h-full object-contain" />
               </div>
-              {/* Frame overlay */}
               <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
-              {/* Label at bottom of frame */}
               <div className="absolute bottom-0 left-0 right-0 z-20 pb-3 text-center" style={{ paddingLeft: '5%', paddingRight: '5%', bottom: '10px' }}>
                 <p style={{ fontFamily: 'var(--font-handwriting)' }} className="text-[12px] leading-[17px] sm:text-[18px] sm:leading-[24px] text-ink-muted">Upload Tags</p>
               </div>
             </div>
-            {/* Upload button separate */}
             <div className="w-full space-y-2">
-              <div className="w-full">
-                <UploadDropdown disabled={isLoading} multiple onFiles={(files) => setStaged((prev) => [...prev, ...files])} />
-              </div>
-              {staged.map((file, i) => (
-                <div key={i} className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2">
-                  <span className="truncate text-[13px] text-ink">{file.name}</span>
-                  <button type="button" onClick={() => removeStaged(i)} disabled={isLoading} className="ml-3 shrink-0 text-[12px] text-ink-muted hover:text-danger disabled:opacity-40">Remove</button>
+              <UploadDropdown label="Upload Tags" disabled={isLoading} multiple onFiles={(files) => setStaged((prev) => [...prev, ...files])} />
+              {staged.length === 1 && (
+                <div className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2">
+                  <span className="truncate text-[13px] text-ink">{staged[0].name}</span>
+                  <button type="button" onClick={() => removeStaged(0)} disabled={isLoading} className="ml-2 shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
                 </div>
-              ))}
+              )}
+              {staged.length > 1 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setStagedListOpen((v) => !v)}
+                    className="flex w-full items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 text-[13px] text-ink cursor-pointer"
+                  >
+                    <span>{staged.length} tags uploaded</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-ink-muted transition-transform ${stagedListOpen ? 'rotate-180' : ''}`}>
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {stagedListOpen && (
+                    <div className="mt-1 rounded-md border border-rule bg-bg overflow-hidden">
+                      {staged.map((file, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2 border-b border-rule last:border-b-0">
+                          <span className="truncate text-[13px] text-ink">{file.name}</span>
+                          <button type="button" onClick={() => removeStaged(i)} disabled={isLoading} className="ml-2 shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {isLoading ? (
-          <div className="max-w-[49%] mx-auto">
-            <button
-              type="button"
-              disabled
-              className="w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium opacity-60"
-            >
-              Scanning...
-            </button>
-          </div>
+          <button
+            type="button"
+            disabled
+            className="w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium opacity-60 cursor-default"
+          >
+            Scanning...
+          </button>
         ) : canScan ? (
-          <div className="max-w-[49%] mx-auto">
-            <button
-              type="button"
-              onClick={handleScan}
-              className="w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium"
-            >
-              Scan {totalQueued} image{totalQueued === 1 ? '' : 's'}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleScan}
+            className="w-full inline-flex items-center justify-center h-10 rounded-md bg-ink text-bg text-[14px] font-medium cursor-pointer"
+          >
+            Scan {totalQueued} image{totalQueued === 1 ? '' : 's'}
+          </button>
         ) : null}
 
         {error && <p className="text-[14px] text-danger">{error}</p>}

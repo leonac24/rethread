@@ -314,7 +314,7 @@ export function ScanningView() {
   }, [router]);
 
   return (
-    <main className="min-h-screen bg-bg flex flex-col items-center justify-center px-4">
+    <main className="flex-1 overflow-hidden bg-bg flex flex-col items-center justify-center px-4">
       <div
         ref={mountRef}
         className="w-full transition-opacity duration-700"
