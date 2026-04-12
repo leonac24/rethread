@@ -65,7 +65,7 @@ function UploadDropdown({ label = 'Add photo', disabled, multiple, onFiles }: Up
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative z-30">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -76,7 +76,7 @@ function UploadDropdown({ label = 'Add photo', disabled, multiple, onFiles }: Up
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-xl bg-[#1c1c1e] shadow-xl">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl bg-[#1c1c1e] shadow-xl">
           <button
             type="button"
             onClick={() => pick(libraryRef)}
