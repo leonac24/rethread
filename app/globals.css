@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #F4F1EA;
+  --color-surface: #FBF9F4;
+  --color-surface-sunk: #ECE8DF;
+  --color-ink: #14161A;
+  --color-ink-muted: #5C6470;
+  --color-ink-faint: #A6ADB6;
+  --color-rule: rgba(20, 22, 26, 0.10);
+
+  --color-accent-50: #EAF4FB;
+  --color-accent-200: #BEDDF0;
+  --color-accent-500: #6FA8CE;
+  --color-accent-700: #2E5F83;
+  --color-accent-900: #13324A;
+
+  --color-success: #5E8B6C;
+  --color-warning: #C8A24A;
+  --color-danger: #B23A2B;
+
+  --font-display: var(--font-fraunces), 'Playfair Display', serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), 'IBM Plex Mono', monospace;
+
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0D1014;
+    --color-surface: #161A21;
+    --color-surface-sunk: #0A0D11;
+    --color-ink: #ECE8DF;
+    --color-ink-muted: #8A919C;
+    --color-rule: rgba(236, 232, 223, 0.12);
+    --color-accent-500: #8EC2E0;
+  }
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
