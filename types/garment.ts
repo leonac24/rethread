@@ -28,7 +28,7 @@ export type RouteOption = {
   distance_km: number;
   hours?: string;
   rating?: number;
-  accepts_item: boolean;
+  accepts_item: boolean | null;
 };
 
 export type ScanResult = {
