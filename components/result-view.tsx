@@ -428,7 +428,15 @@ export function ResultView({ id }: ResultViewProps) {
                   <p className="text-[13px] leading-[20px] text-ink-muted mb-4">{li.summary}</p>
                   <div className="grid grid-cols-1 gap-2">
                     {items.map((item) => (
-                      <div key={item.key} className="rounded-xl bg-bg px-4 py-3">
+                      <div
+                        key={item.key}
+                        className="px-5 py-3"
+                        style={{
+                          backgroundImage: 'url(/images/ribbon.png)',
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                        }}
+                      >
                         <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink mb-0.5">{item.label}</p>
                         <p className="text-[12px] leading-[18px] text-ink-muted">{item.body}</p>
                       </div>
