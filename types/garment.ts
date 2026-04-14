@@ -43,10 +43,17 @@ export type LandfillImpact = {
   breakdown_years: string;
 };
 
+export type FashionTransparencyIndex = {
+  score: number;   // 0–100
+  year: number;
+  brand: string;
+};
+
 export type ScanResult = {
   id: string;
   garment: Garment;
   cost: EnvironmentalCost;
   routes: [RouteOption, RouteOption, RouteOption];
   landfill_impact?: LandfillImpact;
+  fti?: FashionTransparencyIndex;
 };
