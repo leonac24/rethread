@@ -413,6 +413,31 @@ export function ResultView({ id }: ResultViewProps) {
               </div>
             </Card>
 
+            {/* ── Landfill Impact ──────────────────────────────────── */}
+            {data.result.landfill_impact && (() => {
+              const li = data.result.landfill_impact!;
+              const items: { key: string; label: string; body: string }[] = [
+                { key: 'microplastics', label: 'Microplastics', body: li.microplastics },
+                { key: 'methane', label: 'Methane', body: li.methane },
+                { key: 'dye_runoff', label: 'Dye Runoff', body: li.dye_runoff },
+                { key: 'breakdown', label: 'Breakdown Time', body: li.breakdown_years },
+              ];
+              return (
+                <Card>
+                  <SectionLabel>What happens if you throw it in the trash</SectionLabel>
+                  <p className="text-[13px] leading-[20px] text-ink-muted mb-4">{li.summary}</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {items.map((item) => (
+                      <div key={item.key} className="rounded-xl bg-bg px-4 py-3">
+                        <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink mb-0.5">{item.label}</p>
+                        <p className="text-[12px] leading-[18px] text-ink-muted">{item.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })()}
+
             {/* ── Next Routes ──────────────────────────────────────── */}
             <Card className="!p-0 overflow-hidden">
               <div className="px-5 pt-5 pb-2">

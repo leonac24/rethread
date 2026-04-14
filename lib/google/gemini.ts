@@ -1,4 +1,4 @@
-import type { EnvironmentalCost, Garment } from '@/types/garment';
+import type { EnvironmentalCost, Garment, LandfillImpact } from '@/types/garment';
 
 // Gemini — structured environmental-cost reasoning + garment image analysis.
 // Enforce responseSchema so output always matches expected types.
@@ -141,6 +141,78 @@ export type GarmentImageAnalysis = {
   category: string | null;
   color: string | null;
 };
+
+export async function computeLandfillImpact(garment: Garment): Promise<LandfillImpact> {
+  const apiKey = getApiKey();
+
+  const fiberList = garment.fibers.length
+    ? garment.fibers.map((f) => `${f.percentage}% ${f.material}`).join(', ')
+    : 'unknown composition';
+
+  const prompt = [
+    'You are an environmental scientist specializing in textile waste.',
+    `A garment made of ${fiberList}${garment.category ? ` (${garment.category})` : ''}${garment.origin ? `, manufactured in ${garment.origin},` : ''} is about to be thrown in the trash and sent to landfill.`,
+    'Write a factual, fiber-specific analysis of the environmental damage this causes.',
+    'Cover exactly four areas:',
+    '1. microplastics — which fibers shed microplastics, how they leach into soil and groundwater',
+    '2. methane — decomposition timeline and methane/greenhouse gas output from organic fibers',
+    '3. dye_runoff — toxic dye and chemical runoff from this specific fiber blend and likely dye types into soil and water',
+    '4. breakdown_years — realistic range of years for this specific fiber blend to break down in landfill',
+    'Also write a one-sentence summary of the overall landfill impact.',
+    'Be specific to the fiber blend. Keep each field under 40 words. breakdown_years should be a short string like "200–500 years" or "20–30 years".',
+    'Return only valid JSON matching the schema.',
+  ].join(' ');
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            required: ['summary', 'microplastics', 'methane', 'dye_runoff', 'breakdown_years'],
+            properties: {
+              summary: { type: 'STRING' },
+              microplastics: { type: 'STRING' },
+              methane: { type: 'STRING' },
+              dye_runoff: { type: 'STRING' },
+              breakdown_years: { type: 'STRING' },
+            },
+          },
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Gemini landfill impact failed (${response.status}): ${text}`);
+  }
+
+  const data = (await response.json()) as GeminiResponse;
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) throw new Error('Gemini returned no content for landfill impact.');
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Gemini returned non-JSON for landfill impact: ${rawText}`);
+  }
+
+  const r = parsed as Record<string, unknown>;
+  return {
+    summary: String(r.summary ?? ''),
+    microplastics: String(r.microplastics ?? ''),
+    methane: String(r.methane ?? ''),
+    dye_runoff: String(r.dye_runoff ?? ''),
+    breakdown_years: String(r.breakdown_years ?? ''),
+  };
+}
 
 export async function analyzeGarmentImage(
   imageBuffer: Buffer,

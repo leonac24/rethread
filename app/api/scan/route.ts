@@ -1,4 +1,4 @@
-import { analyzeGarmentImage, computeCost } from '@/lib/google/gemini';
+import { analyzeGarmentImage, computeCost, computeLandfillImpact } from '@/lib/google/gemini';
 import { findRoutes } from '@/lib/google/places';
 import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/vision';
 import { saveScanResult } from '@/lib/scan-store';
@@ -147,13 +147,19 @@ async function handleScan(request: Request) {
     console.warn('[scan] no coords on request — using fallback routes');
   }
 
-  const [cost, routes] = await Promise.all([costPromise, routesPromise]);
+  const landfillPromise = computeLandfillImpact(garment).catch((err) => {
+    console.error('[scan] landfill impact failed:', err);
+    return undefined;
+  });
+
+  const [cost, routes, landfill_impact] = await Promise.all([costPromise, routesPromise, landfillPromise]);
 
   const result: ScanResult = {
     id: crypto.randomUUID(),
     garment,
     cost,
     routes,
+    ...(landfill_impact ? { landfill_impact } : {}),
   };
 
   const id = saveScanResult(text, result);
