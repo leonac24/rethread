@@ -6,6 +6,10 @@ import { findRoutes } from '@/lib/google/places';
 // Defaults to Empire State Building if lat/lng omitted.
 
 export async function GET(req: Request) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const { searchParams } = new URL(req.url);
   const lat = Number(searchParams.get('lat') ?? '40.7484');
   const lng = Number(searchParams.get('lng') ?? '-73.9857');

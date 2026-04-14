@@ -1,67 +1,62 @@
 import type { Garment } from '@/types/garment';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
-
-import {
-  getGoogleCredentials,
-  getGoogleCredentialsFromFile,
-} from '@/lib/google/client';
+import { getGoogleCredentials } from '@/lib/google/client';
 
 // Cloud Vision — OCR a care-label photo.
 
-let clientPromise: Promise<ImageAnnotatorClient> | null = null;
+// Proper singleton — no promise-based lazy init to avoid race conditions
+let _client: ImageAnnotatorClient | null = null;
 
-async function getVisionClient(): Promise<ImageAnnotatorClient> {
-  if (clientPromise) {
-    return clientPromise;
-  }
-
-  clientPromise = (async () => {
-    const credentialsFile = process.env.GOOGLE_APPLICATION_CREDENTIALS_FILE;
-    if (credentialsFile) {
-      const creds = await getGoogleCredentialsFromFile(credentialsFile);
-      return new ImageAnnotatorClient({
-        projectId: creds.projectId,
-        credentials: {
-          client_email: creds.clientEmail,
-          private_key: creds.privateKey,
-        },
-      });
-    }
-
-    const creds = getGoogleCredentials();
-    return new ImageAnnotatorClient({
-      projectId: creds.projectId,
-      credentials: {
-        client_email: creds.clientEmail,
-        private_key: creds.privateKey,
-      },
-    });
-  })();
-
-  return clientPromise;
+function getVisionClient(): ImageAnnotatorClient {
+  if (_client) return _client;
+  const creds = getGoogleCredentials();
+  _client = new ImageAnnotatorClient({
+    projectId: creds.projectId,
+    credentials: {
+      client_email: creds.clientEmail,
+      private_key: creds.privateKey,
+    },
+  });
+  return _client;
 }
 
+// Material synonym normalization — maps shorthand to canonical names
+const MATERIAL_SYNONYMS: Record<string, string> = {
+  poly: 'polyester',
+  elastane: 'spandex',
+  lycra: 'spandex',
+  viscose: 'rayon',
+  modal: 'rayon',
+  tencel: 'lyocell',
+};
+
 function normalizeMaterial(raw: string): string {
-  return raw.toLowerCase().replace(/\s+/g, ' ').trim();
+  const normalized = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+  return MATERIAL_SYNONYMS[normalized] ?? normalized;
 }
 
 function extractFibers(text: string): Garment['fibers'] {
-  const matches = text.matchAll(/(\d{1,3})\s*%\s*([a-z][a-z\-\s]{1,40})/gi);
   const fibers: Garment['fibers'] = [];
   const seen = new Set<string>();
 
-  for (const match of matches) {
+  // Pattern 1: "80% cotton" — standard forward format
+  const forwardMatches = text.matchAll(/(\d{1,3})\s*%\s*([a-z][a-z\-\s]{1,40})/gi);
+  for (const match of forwardMatches) {
     const percentage = Number(match[1]);
     const material = normalizeMaterial(match[2]);
+    if (!material || Number.isNaN(percentage) || percentage < 1 || percentage > 100) continue;
+    if (seen.has(material)) continue;
+    fibers.push({ material, percentage });
+    seen.add(material);
+  }
 
-    if (!material || Number.isNaN(percentage) || percentage < 1 || percentage > 100) {
-      continue;
-    }
-
-    if (seen.has(material)) {
-      continue;
-    }
-
+  // Pattern 2: "cotton (80%)" — reverse format
+  const reverseMatches = text.matchAll(/([a-z][a-z\-\s]{1,40})\s*\((\d{1,3})\s*%\)/gi);
+  for (const match of reverseMatches) {
+    const percentage = Number(match[2]);
+    const material = normalizeMaterial(match[1]);
+    if (!material || Number.isNaN(percentage) || percentage < 1 || percentage > 100) continue;
+    if (seen.has(material)) continue;
     fibers.push({ material, percentage });
     seen.add(material);
   }
@@ -70,7 +65,9 @@ function extractFibers(text: string): Garment['fibers'] {
 }
 
 function extractOrigin(text: string): string | null {
-  const originMatch = text.match(/(?:made\s+in|country\s+of\s+origin)\s*[:\-]?\s*([a-z\s]+)/i);
+  const originMatch = text.match(
+    /(?:made\s+in|manufactured\s+in|product\s+of|country\s+of\s+origin)\s*[:\-]?\s*([a-z\s]+)/i,
+  );
   if (!originMatch?.[1]) {
     return null;
   }
@@ -122,7 +119,7 @@ export async function readClothingLabelText(image: Buffer): Promise<string> {
     throw new Error('Image buffer is empty');
   }
 
-  const client = await getVisionClient();
+  const client = getVisionClient();
   const [result] = await client.documentTextDetection({
     image: { content: image },
   });
@@ -139,12 +136,10 @@ export async function readClothingLabel(
   image: Buffer,
 ): Promise<Partial<Garment>> {
   const text = await readClothingLabelText(image);
-
   return parseClothingLabelText(text);
 }
 
 export function parseClothingLabelText(text: string): Partial<Garment> {
-
   if (!text.trim()) {
     return {
       fibers: [],

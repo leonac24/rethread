@@ -8,7 +8,6 @@ export type Garment = {
   origin: string | null;
   category: string | null;
   brand?: string;
-  price?: number;
   color?: string;
 };
 

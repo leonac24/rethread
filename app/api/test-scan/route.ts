@@ -14,6 +14,10 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   try {
     const body = (await request.json()) as Partial<TestScanRequestBody>;
 
@@ -55,6 +59,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   return NextResponse.json({
     ok: true,
     temporary: true,

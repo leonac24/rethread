@@ -2,6 +2,7 @@
 // (Good On You, Fashion Transparency Index, etc.).
 
 import { getGoogleAccessToken, getGoogleCredentials } from '@/lib/google/client';
+import { log } from '@/lib/logger';
 
 type BigQueryQueryResponse = {
   rows?: Array<{
@@ -9,6 +10,13 @@ type BigQueryQueryResponse = {
   }>;
   errors?: Array<{ message: string }>;
 };
+
+// Column names must match ^[a-zA-Z_][a-zA-Z0-9_]{0,127}$ to prevent SQL injection
+const COLUMN_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]{0,127}$/;
+
+// In-memory brand context cache — avoids redundant BigQuery calls for the same brand
+const brandCache = new Map<string, { result: string | null; cachedAt: number }>();
+const BRAND_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 function resolveTableRef(tableInput: string, defaultProject: string) {
   const parts = tableInput.split('.').filter(Boolean);
@@ -41,6 +49,14 @@ export async function getBrandContext(
     return null;
   }
 
+  const brandKey = brand.trim().toLowerCase();
+
+  // Return from cache if still fresh
+  const cached = brandCache.get(brandKey);
+  if (cached && Date.now() - cached.cachedAt < BRAND_CACHE_TTL) {
+    return cached.result;
+  }
+
   const credentials = getGoogleCredentials();
   const tableInput = process.env.BIGQUERY_DATASET;
 
@@ -56,6 +72,14 @@ export async function getBrandContext(
   }
 
   const brandColumn = process.env.BIGQUERY_BRAND_COLUMN?.trim() || 'brand';
+
+  // Validate column name to prevent SQL injection via env var
+  if (!COLUMN_NAME_RE.test(brandColumn)) {
+    throw new Error(
+      `Invalid BIGQUERY_BRAND_COLUMN value: "${brandColumn}". Must be a valid SQL identifier.`,
+    );
+  }
+
   const { projectId, datasetId, tableId } = resolveTableRef(
     tableInput,
     defaultProject,
@@ -76,6 +100,7 @@ export async function getBrandContext(
     `https://bigquery.googleapis.com/bigquery/v2/projects/${projectId}/queries`,
     {
       method: 'POST',
+      signal: AbortSignal.timeout(10_000),
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -107,9 +132,10 @@ export async function getBrandContext(
   }
 
   const rowJson = data.rows?.[0]?.f?.[0]?.v;
-  if (!rowJson) {
-    return null;
-  }
+  const result = rowJson ? `Brand sustainability context for "${brand.trim()}": ${rowJson}` : null;
 
-  return `Brand sustainability context for "${brand.trim()}": ${rowJson}`;
+  brandCache.set(brandKey, { result, cachedAt: Date.now() });
+  log.info('BigQuery brand context fetched', { stage: 'cost', brand: brandKey, found: !!result });
+
+  return result;
 }
