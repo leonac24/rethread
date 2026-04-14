@@ -251,6 +251,27 @@ export function ResultView({ id }: ResultViewProps) {
                   </p>
                   <p className="text-[14px] text-ink-muted mt-0.5">{data.result.garment.brand ?? 'Unknown brand'}</p>
 
+                  {data.result.fti && (() => {
+                    const { score, year } = data.result.fti!;
+                    const color = score >= 61 ? '#5E8B6C' : score >= 41 ? '#C8A24A' : score >= 21 ? '#B07D2E' : '#B23A2B';
+                    const label = score >= 61 ? 'High' : score >= 41 ? 'Moderate' : score >= 21 ? 'Low' : 'Very Low';
+                    return (
+                      <div className="flex items-center gap-2 mt-2">
+                        <div
+                          className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold"
+                          style={{ backgroundColor: `${color}18`, color }}
+                        >
+                          <span
+                            className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: color }}
+                          />
+                          Transparency {score}/100 · {label}
+                        </div>
+                        <span className="text-[10px] text-ink-faint">FTI {year}</span>
+                      </div>
+                    );
+                  })()}
+
                   {data.result.garment.color && (
                     <div className="flex items-center gap-2 mt-3">
                       <div

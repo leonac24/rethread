@@ -1,5 +1,6 @@
 import { analyzeGarmentImage, computeCost, computeLandfillImpact } from '@/lib/google/gemini';
 import { getBrandContext } from '@/lib/google/bigquery';
+import { getFashionTransparencyScore, formatFtiContext } from '@/lib/wikirate';
 import { findRoutes } from '@/lib/google/places';
 import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/vision';
 import { saveScanResult } from '@/lib/scan-store';
@@ -222,29 +223,38 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     reqLog.warn('No coords on request — using fallback routes', { stage: 'route' });
   }
 
-  const costPromise: Promise<ScanResult['cost']> = getBrandContext(garment.brand ?? '')
-    .catch((err) => {
+  const ftiPromise = getFashionTransparencyScore(garment.brand ?? '').catch((err) => {
+    reqLog.warn('WikiRate FTI lookup failed', { stage: 'cost', err: String(err) });
+    return null;
+  });
+
+  const costPromise = Promise.all([
+    getBrandContext(garment.brand ?? '').catch((err) => {
       reqLog.warn('BigQuery brand context failed, proceeding without it', { stage: 'cost', err: err instanceof Error ? err.message : String(err) });
       return null;
-    })
-    .then((brandContext) => computeCost(garment, brandContext ?? undefined))
-    .catch((err) => {
-      reqLog.error('Gemini cost estimation failed, returning fallback', err, { stage: 'cost' });
-      return {
-        water_liters: 0,
-        co2_kg: 0,
-        dye_pollution_score: 1,
-        confidence: 'low' as const,
-        reasoning: 'Cost estimation unavailable. Showing fallback values.',
-      };
-    });
+    }),
+    ftiPromise,
+  ]).then(([brandContext, fti]) => {
+    const ftiContext = fti ? formatFtiContext(fti) : null;
+    const combinedContext = [brandContext, ftiContext].filter(Boolean).join('\n') || undefined;
+    return computeCost(garment, combinedContext);
+  }).catch((err) => {
+    reqLog.error('Gemini cost estimation failed, returning fallback', err, { stage: 'cost' });
+    return {
+      water_liters: 0,
+      co2_kg: 0,
+      dye_pollution_score: 1,
+      confidence: 'low' as const,
+      reasoning: 'Cost estimation unavailable. Showing fallback values.',
+    };
+  });
 
   const landfillPromise = computeLandfillImpact(garment).catch((err) => {
-    console.error('[scan] landfill impact failed:', err);
+    reqLog.warn('Landfill impact failed', { stage: 'cost', err: String(err) });
     return undefined;
   });
 
-  const [cost, routes, landfill_impact] = await Promise.all([costPromise, routesPromise, landfillPromise]);
+  const [cost, routes, landfill_impact, fti] = await Promise.all([costPromise, routesPromise, landfillPromise, ftiPromise]);
 
   const result: ScanResult = {
     id: crypto.randomUUID(),
@@ -252,6 +262,7 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     cost,
     routes,
     ...(landfill_impact ? { landfill_impact } : {}),
+    ...(fti ? { fti } : {}),
   };
 
   const id = await saveScanResult(text, result);
