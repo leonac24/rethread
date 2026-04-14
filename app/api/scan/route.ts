@@ -1,4 +1,4 @@
-import { analyzeGarmentImage, computeCost, computeLandfillImpact } from '@/lib/google/gemini';
+import { analyzeGarmentImage, computeCost, computeLandfillImpact, parseLabelWithGemini } from '@/lib/google/gemini';
 import { getFashionTransparencyScore } from '@/lib/wikirate';
 import { findRoutes } from '@/lib/google/places';
 import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/vision';
@@ -185,11 +185,27 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
   ]);
 
   const text = texts.join('\n');
-  const parsed = parseClothingLabelText(text);
+
+  // Use Gemini to parse the label — handles OCR noise, multi-language text, and layout variations.
+  // Fall back to the regex parser if Gemini fails.
+  let parsed: Awaited<ReturnType<typeof parseLabelWithGemini>>;
+  try {
+    parsed = await parseLabelWithGemini(text);
+    reqLog.info('Label parsed via Gemini', { stage: 'ingest', brand: parsed.brand, fiberCount: parsed.fibers.length });
+  } catch (err) {
+    reqLog.warn('Gemini label parse failed — falling back to regex parser', { stage: 'ingest', err: String(err) });
+    const fallback = parseClothingLabelText(text);
+    parsed = {
+      brand:    fallback.brand ?? null,
+      fibers:   fallback.fibers ?? [],
+      origin:   fallback.origin ?? null,
+      category: fallback.category ?? null,
+    };
+  }
 
   const garment: ScanResult['garment'] = {
-    fibers: parsed.fibers ?? [],
-    origin: parsed.origin ?? null,
+    fibers: parsed.fibers,
+    origin: parsed.origin,
     category: parsed.category ?? imageAnalysis?.category ?? null,
     ...(parsed.brand ? { brand: parsed.brand } : {}),
     ...(imageAnalysis?.color ? { color: imageAnalysis.color } : {}),

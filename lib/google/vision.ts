@@ -30,9 +30,42 @@ const MATERIAL_SYNONYMS: Record<string, string> = {
   tencel: 'lyocell',
 };
 
+// Words that signal the end of a fiber name (start of label boilerplate)
+const FIBER_STOP_RE = /\s+(?:made|fabric|fabriqu|body|shell|lining|trim|content|exclusive|outer|import|origin|hand|wash|dry|iron|do\s+not|machine|tumble)\b.*/i;
+
+function trimFiberName(raw: string): string {
+  return raw.replace(FIBER_STOP_RE, '').trim();
+}
+
 function normalizeMaterial(raw: string): string {
-  const normalized = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+  const trimmed = trimFiberName(raw);
+  const normalized = trimmed.toLowerCase().replace(/\s+/g, ' ').trim();
   return MATERIAL_SYNONYMS[normalized] ?? normalized;
+}
+
+// English consonant clusters that validly start a word.
+// Used to detect single-char OCR artifacts (e.g. ® → "B") glued to a brand name.
+const VALID_CLUSTERS = new Set([
+  'BL','BR','CH','CL','CR','DR','DW','FL','FR','GH','GL','GR',
+  'KN','PH','PL','PR','SC','SH','SK','SL','SM','SN','SP','SQ',
+  'ST','SW','TH','TR','TW','WH','WR',
+]);
+const VOWELS = new Set(['A','E','I','O','U']);
+
+function stripBrandArtifact(s: string): string {
+  if (!s.includes(' ')) return s; // Only strip from multi-word strings
+  const firstWord = s.split(/\s+/)[0];
+  if (firstWord.length < 3) return s;
+  const c1 = firstWord[0].toUpperCase();
+  const c2 = firstWord[1].toUpperCase();
+  if (
+    /[A-Z]/.test(c1) && /[A-Z]/.test(c2) &&
+    !VOWELS.has(c1) && !VOWELS.has(c2) &&
+    !VALID_CLUSTERS.has(c1 + c2)
+  ) {
+    return s.slice(1);
+  }
+  return s;
 }
 
 function extractFibers(text: string): Garment['fibers'] {
@@ -40,7 +73,8 @@ function extractFibers(text: string): Garment['fibers'] {
   const seen = new Set<string>();
 
   // Pattern 1: "80% cotton" — standard forward format
-  const forwardMatches = text.matchAll(/(\d{1,3})\s*%\s*([a-z][a-z\-\s]{1,40})/gi);
+  // Limit material capture to 30 chars; stop-word trimming handles the rest
+  const forwardMatches = text.matchAll(/(\d{1,3})\s*%\s*([a-z][a-z\-\s]{1,30})/gi);
   for (const match of forwardMatches) {
     const percentage = Number(match[1]);
     const material = normalizeMaterial(match[2]);
@@ -51,7 +85,7 @@ function extractFibers(text: string): Garment['fibers'] {
   }
 
   // Pattern 2: "cotton (80%)" — reverse format
-  const reverseMatches = text.matchAll(/([a-z][a-z\-\s]{1,40})\s*\((\d{1,3})\s*%\)/gi);
+  const reverseMatches = text.matchAll(/([a-z][a-z\-\s]{1,30})\s*\((\d{1,3})\s*%\)/gi);
   for (const match of reverseMatches) {
     const percentage = Number(match[2]);
     const material = normalizeMaterial(match[1]);
@@ -59,6 +93,12 @@ function extractFibers(text: string): Garment['fibers'] {
     if (seen.has(material)) continue;
     fibers.push({ material, percentage });
     seen.add(material);
+  }
+
+  // If percentages sum over 100 (e.g. multi-section label), scale proportionally
+  const total = fibers.reduce((sum, f) => sum + f.percentage, 0);
+  if (total > 100) {
+    for (const f of fibers) f.percentage = Math.round((f.percentage / total) * 100);
   }
 
   return fibers;
@@ -100,15 +140,11 @@ function inferBrand(text: string): string | undefined {
     .slice(0, 5);
 
   for (const line of lines) {
-    if (line.length < 2 || line.length > 30) {
-      continue;
-    }
+    if (line.length < 2 || line.length > 40) continue;
+    if (/\d|%|made in|wash|care|polyester|cotton|rayon|spandex/i.test(line)) continue;
 
-    if (/\d|%|made in|wash|care|polyester|cotton|rayon|spandex/i.test(line)) {
-      continue;
-    }
-
-    return line;
+    const cleaned = stripBrandArtifact(line);
+    if (cleaned.length >= 2) return cleaned;
   }
 
   return undefined;

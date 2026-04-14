@@ -115,7 +115,7 @@ function ChevronRight() {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-muted mb-4">
+    <p className="text-[14px] font-semibold uppercase tracking-[0.1em] text-ink-muted mb-4">
       {children}
     </p>
   );
@@ -209,10 +209,10 @@ export function ResultView({ id }: ResultViewProps) {
 
         {/* Loading / Error */}
         {!data && !error && (
-          <p className="text-center text-[14px] text-ink-muted py-5">Loading result...</p>
+          <p className="text-center text-[16px] text-ink-muted py-5">Loading result...</p>
         )}
         {error && (
-          <p className="text-center text-[14px] text-danger py-5">{error}</p>
+          <p className="text-center text-[16px] text-danger py-5">{error}</p>
         )}
 
         {data && (
@@ -246,10 +246,10 @@ export function ResultView({ id }: ResultViewProps) {
 
                 {/* Details */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-[25px] font-bold text-ink leading-tight">
+                  <p className="text-[29px] font-bold text-ink leading-tight">
                     {data.result.garment.category ?? 'Unknown'}
                   </p>
-                  <p className="text-[14px] text-ink-muted mt-0.5">{data.result.garment.brand ?? 'Unknown brand'}</p>
+                  <p className="text-[16px] text-ink-muted mt-0.5">{data.result.garment.brand ?? 'Unknown brand'}</p>
 
                   {data.result.fti ? (() => {
                     const { score, year } = data.result.fti!;
@@ -266,7 +266,7 @@ export function ResultView({ id }: ResultViewProps) {
                       <div className="mt-3 rounded-xl bg-bg px-3 py-2.5">
                         <div className="flex items-center gap-2 mb-1">
                           <div
-                            className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+                            className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[13px] font-bold"
                             style={{ backgroundColor: `${color}18`, color }}
                           >
                             <span
@@ -279,17 +279,17 @@ export function ResultView({ id }: ResultViewProps) {
                           href={data.result.fti!.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[10px] text-ink-faint hover:underline underline-offset-2"
+                          className="text-[12px] text-ink-faint hover:underline underline-offset-2"
                         >
                           FTI {year} ↗
                         </a>
                         </div>
-                        <p className="text-[11px] leading-[16px] text-ink-muted">{explanation}</p>
+                        <p className="text-[13px] leading-[16px] text-ink-muted">{explanation}</p>
                       </div>
                     );
                   })() : (
-                    <p className="text-[11px] text-ink-faint mt-1.5 italic">
-                      Rethread couldn&apos;t find any info on this brand.
+                    <p className="text-[13px] text-ink-faint mt-1.5 italic">
+                      No Fashion Transparency Index available for this brand.
                     </p>
                   )}
 
@@ -299,7 +299,7 @@ export function ResultView({ id }: ResultViewProps) {
                         className="w-4 h-4 rounded-full border border-rule flex-shrink-0"
                         style={{ backgroundColor: colorToCSS(data.result.garment.color) }}
                       />
-                      <span className="text-[12px] text-ink-muted">{data.result.garment.color}</span>
+                      <span className="text-[14px] text-ink-muted">{data.result.garment.color}</span>
                     </div>
                   )}
 
@@ -309,7 +309,7 @@ export function ResultView({ id }: ResultViewProps) {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint flex-shrink-0">
                           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
                         </svg>
-                        <p className="text-[13px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
+                        <p className="text-[15px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
                       </div>
                       {countryMapSrcdoc(data.result.garment.origin) && (
                         <iframe
@@ -386,7 +386,7 @@ export function ResultView({ id }: ResultViewProps) {
                   {fiberData.map((d, i) => (
                     <span
                       key={d.name}
-                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold text-ink"
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[14px] font-bold text-ink"
                       style={{ backgroundColor: 'white' }}
                     >
                       <span
@@ -410,12 +410,12 @@ export function ResultView({ id }: ResultViewProps) {
                   className="p-6 text-center"
                   style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(-1.5deg)' }}
                 >
-                  <p className="text-[9px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
-                  <p className="text-[23px] font-bold text-ink leading-none">
+                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
+                  <p className="text-[26px] font-bold text-ink leading-none">
                     {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
                   </p>
-                  <p className="text-[9px] text-ink font-medium mt-1">gallons</p>
-                  <p className="text-[8px] text-ink-muted mt-2 leading-tight">
+                  <p className="text-[10px] text-ink font-medium mt-1">gallons</p>
+                  <p className="text-[9px] text-ink-muted mt-2 leading-tight">
                     est. based on <a href="https://waterfootprint.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">WaterFootprint.org</a><br/>per-fiber LCA data
                   </p>
                 </div>
@@ -423,12 +423,12 @@ export function ResultView({ id }: ResultViewProps) {
                   className="p-6 text-center"
                   style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(1.2deg)' }}
                 >
-                  <p className="text-[9px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
-                  <p className="text-[23px] font-bold text-ink leading-none">
+                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
+                  <p className="text-[26px] font-bold text-ink leading-none">
                     {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
                   </p>
-                  <p className="text-[9px] text-ink font-medium mt-1">pounds</p>
-                  <p className="text-[8px] text-ink-muted mt-2 leading-tight">
+                  <p className="text-[10px] text-ink font-medium mt-1">pounds</p>
+                  <p className="text-[9px] text-ink-muted mt-2 leading-tight">
                     est. based on <a href="https://textileexchange.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">Textile Exchange</a><br/>per-fiber LCA data
                   </p>
                 </div>
@@ -437,8 +437,8 @@ export function ResultView({ id }: ResultViewProps) {
               {/* Dye risk bar chart */}
               <div className="rounded-xl bg-bg p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Dye Risk</p>
-                  <span className="text-[13px] font-bold" style={{ color: dyeColor }}>{dyeScore}/10</span>
+                  <p className="text-[14px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Dye Risk</p>
+                  <span className="text-[15px] font-bold" style={{ color: dyeColor }}>{dyeScore}/10</span>
                 </div>
                 <ResponsiveContainer width="100%" height={52}>
                   <BarChart data={[{ value: dyeScore }]} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -448,16 +448,16 @@ export function ResultView({ id }: ResultViewProps) {
                   </BarChart>
                 </ResponsiveContainer>
                 {data.result.cost.dye_type && (
-                  <p className="text-[12px] font-medium text-ink mt-2">{data.result.cost.dye_type}</p>
+                  <p className="text-[14px] font-medium text-ink mt-2">{data.result.cost.dye_type}</p>
                 )}
                 {data.result.cost.dye_reasoning && (
-                  <p className="text-[11px] leading-[17px] text-ink-muted mt-1">{data.result.cost.dye_reasoning}</p>
+                  <p className="text-[13px] leading-[17px] text-ink-muted mt-1">{data.result.cost.dye_reasoning}</p>
                 )}
               </div>
 
               <div className="mt-3 pt-3 border-t border-rule">
-                <p className="text-[12px] leading-[19px] text-ink-muted">{truncate(data.result.cost.reasoning, 50)}</p>
-                <p className="mt-2 text-[11px] text-ink-faint capitalize">Confidence: {data.result.cost.confidence}</p>
+                <p className="text-[14px] leading-[19px] text-ink-muted">{data.result.cost.reasoning}</p>
+                <p className="mt-2 text-[13px] text-ink-faint capitalize">Confidence: {data.result.cost.confidence}</p>
               </div>
             </Card>
 
@@ -473,7 +473,7 @@ export function ResultView({ id }: ResultViewProps) {
               return (
                 <Card>
                   <SectionLabel>What happens if you throw it in the trash</SectionLabel>
-                  <p className="text-[13px] leading-[20px] text-ink-muted mb-4">{li.summary}</p>
+                  <p className="text-[15px] leading-[20px] text-ink mb-4">{li.summary}</p>
                   <div className="grid grid-cols-1 gap-2">
                     {items.map((item) => (
                       <div
@@ -485,8 +485,8 @@ export function ResultView({ id }: ResultViewProps) {
                           backgroundPosition: 'center',
                         }}
                       >
-                        <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink mb-0.5">{item.label}</p>
-                        <p className="text-[12px] leading-[18px] text-ink-muted">{item.body}</p>
+                        <p className="text-[14px] font-bold uppercase tracking-[0.08em] text-ink mb-0.5">{item.label}</p>
+                        <p className="text-[14px] leading-[18px] text-ink">{item.body}</p>
                       </div>
                     ))}
                   </div>
@@ -526,9 +526,9 @@ export function ResultView({ id }: ResultViewProps) {
                           {meta.icon}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[14px] font-semibold text-ink truncate">{route.name}</p>
-                          <p className="text-[12px] text-ink-muted mt-0.5">{route.address}</p>
-                          <p className="text-[12px] text-ink-faint mt-0.5">
+                          <p className="text-[16px] font-semibold text-ink truncate">{route.name}</p>
+                          <p className="text-[14px] text-ink-muted mt-0.5">{route.address}</p>
+                          <p className="text-[14px] text-ink-faint mt-0.5">
                             {meta.label} · {(route.distance_km * 0.621371).toFixed(1)} mi
                           </p>
                         </div>
@@ -560,7 +560,7 @@ export function ResultView({ id }: ResultViewProps) {
                 onClick={() => setOcrOpen((v) => !v)}
                 className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:brightness-95"
               >
-                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-ink-muted">— Care Label OCR —</p>
+                <p className="font-mono text-[13px] font-bold uppercase tracking-[0.2em] text-ink-muted">— Care Label OCR —</p>
                 <svg
                   width="14" height="14" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -573,7 +573,7 @@ export function ResultView({ id }: ResultViewProps) {
               {ocrOpen && (
                 <div className="px-5 pb-6 pt-1">
                   <div className="border-t border-dashed border-ink/20 mb-4" />
-                  <pre className="whitespace-pre-wrap font-mono text-[11px] leading-[20px] text-ink">
+                  <pre className="whitespace-pre-wrap font-mono text-[13px] leading-[20px] text-ink">
                     {data.text || 'No text detected.'}
                   </pre>
                   <div className="border-t border-dashed border-ink/20 mt-4" />
