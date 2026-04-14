@@ -32,6 +32,10 @@ type PlacesResponse = {
   }>;
 };
 
+function fallbackRoute(kind: RouteKind): RouteOption {
+  return { kind, name: `No ${kind} route available`, address: 'Location not provided', distance_km: 0, accepts_item: null };
+}
+
 export async function findRoutes(
   lat: number,
   lng: number,
@@ -40,13 +44,17 @@ export async function findRoutes(
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) throw new Error('GOOGLE_MAPS_API_KEY not set');
 
-  const [repair, resale, donation] = await Promise.all([
+  const [repair, resale, donation] = await Promise.allSettled([
     nearest('repair', lat, lng, category, apiKey),
     nearest('resale', lat, lng, category, apiKey),
     nearest('donation', lat, lng, category, apiKey),
   ]);
 
-  return [repair, resale, donation];
+  return [
+    repair.status === 'fulfilled' ? repair.value : fallbackRoute('repair'),
+    resale.status === 'fulfilled' ? resale.value : fallbackRoute('resale'),
+    donation.status === 'fulfilled' ? donation.value : fallbackRoute('donation'),
+  ];
 }
 
 async function nearest(

@@ -3,12 +3,15 @@ export type Fiber = {
   percentage: number;
 };
 
+export type GarmentCondition = 'poor' | 'fair' | 'good' | 'excellent';
+
 export type Garment = {
   fibers: Fiber[];
   origin: string | null;
   category: string | null;
   brand?: string;
   color?: string;
+  condition?: GarmentCondition;
 };
 
 export type EnvironmentalCost = {
@@ -19,6 +22,9 @@ export type EnvironmentalCost = {
   reasoning: string;
   dye_type?: string;
   dye_reasoning?: string;
+  disposal_co2_kg: number;
+  disposal_landfill_years: number;
+  disposal_note: string;
 };
 
 export type RouteKind = 'repair' | 'resale' | 'donation';
@@ -34,6 +40,8 @@ export type RouteOption = {
   rating?: number;
   accepts_item: boolean | null;
 };
+
+export type OutcomeAction = 'throw_away' | 'repair' | 'list' | 'donate';
 
 export type ScanResult = {
   id: string;

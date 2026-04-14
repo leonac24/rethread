@@ -13,6 +13,9 @@ function buildFallbackResult(garment: ScanResult['garment']): ScanResult {
       dye_pollution_score: 0,
       confidence: 'low',
       reasoning: 'Environmental cost stage is not connected yet.',
+      disposal_co2_kg: 0,
+      disposal_landfill_years: 0,
+      disposal_note: 'Disposal impact unavailable.',
     },
     routes: [
       {
