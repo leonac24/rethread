@@ -255,19 +255,36 @@ export function ResultView({ id }: ResultViewProps) {
                     const { score, year } = data.result.fti!;
                     const color = score >= 61 ? '#5E8B6C' : score >= 41 ? '#C8A24A' : score >= 21 ? '#B07D2E' : '#B23A2B';
                     const label = score >= 61 ? 'High' : score >= 41 ? 'Moderate' : score >= 21 ? 'Low' : 'Very Low';
+                    const explanation = score >= 61
+                      ? 'This brand publicly discloses most of its supply chain, environmental policies, and labor practices.'
+                      : score >= 41
+                        ? 'This brand shares some information about its supply chain but significant gaps remain.'
+                        : score >= 21
+                          ? 'This brand discloses very little about where and how its clothes are made.'
+                          : 'This brand provides almost no public information about its supply chain or environmental impact.';
                     return (
-                      <div className="flex items-center gap-2 mt-2">
-                        <div
-                          className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                          style={{ backgroundColor: `${color}18`, color }}
+                      <div className="mt-3 rounded-xl bg-bg px-3 py-2.5">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div
+                            className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+                            style={{ backgroundColor: `${color}18`, color }}
+                          >
+                            <span
+                              className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: color }}
+                            />
+                            Transparency {score}/100 · {label}
+                          </div>
+                          <a
+                          href={data.result.fti!.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-ink-faint hover:underline underline-offset-2"
                         >
-                          <span
-                            className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: color }}
-                          />
-                          Transparency {score}/100 · {label}
+                          FTI {year} ↗
+                        </a>
                         </div>
-                        <span className="text-[10px] text-ink-faint">FTI {year}</span>
+                        <p className="text-[11px] leading-[16px] text-ink-muted">{explanation}</p>
                       </div>
                     );
                   })()}

@@ -47,6 +47,7 @@ export type FashionTransparencyIndex = {
   score: number;   // 0–100
   year: number;
   brand: string;
+  url: string;
 };
 
 export type ScanResult = {
