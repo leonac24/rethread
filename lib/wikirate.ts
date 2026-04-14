@@ -8,6 +8,7 @@ export type WikiRateResult = {
   score: number;        // 0–100
   year: number;
   brand: string;
+  url: string;
 };
 
 type WikiRateAnswer = {
@@ -16,7 +17,7 @@ type WikiRateAnswer = {
   numeric?: number | string;
   year?: number;
   company?: string;
-  company_name?: string;
+  html_url?: string;
 };
 
 
@@ -70,6 +71,48 @@ const BRAND_ALIASES: Record<string, string> = {
   'c&a': 'C&A',
   'reserved': 'LPP',
   'lpp': 'LPP',
+  'new balance': 'New Balance',
+  'bnew balance': 'New Balance',
+  'hollister': 'Abercrombie & Fitch Co.',
+  'abercrombie': 'Abercrombie & Fitch Co.',
+  'abercrombie & fitch': 'Abercrombie & Fitch Co.',
+  'american eagle': 'American Eagle Outfitters',
+  'forever 21': 'Forever 21',
+  'urban outfitters': 'Urban Outfitters',
+  'free people': 'Urban Outfitters',
+  'anthropologie': 'Urban Outfitters',
+  'j.crew': 'J.Crew',
+  'j crew': 'J.Crew',
+  'target': 'Target Corporation',
+  'walmart': 'Walmart',
+  'george': 'Walmart',
+  'champion': 'HanesBrands',
+  'hanes': 'HanesBrands',
+  'fruit of the loom': 'Fruit of the Loom',
+  'reebok': 'Reebok',
+  'fila': 'Fila',
+  'asics': 'ASICS',
+  'skechers': 'Skechers',
+  'converse': 'Nike',
+  'jordan': 'Nike',
+  'vans': 'VF Corporation',
+  'supreme': 'Supreme',
+  'north face': 'VF Corporation',
+  'carhartt': 'Carhartt',
+  'dockers': 'Levi Strauss & Co.',
+  'tommy': 'PVH Corp.',
+  'versace': 'Capri Holdings',
+  'michael kors': 'Capri Holdings',
+  'jimmy choo': 'Capri Holdings',
+  'coach': 'Tapestry',
+  'kate spade': 'Tapestry',
+  'lacoste': 'Lacoste',
+  'fred perry': 'Fred Perry',
+  'superdry': 'Superdry',
+  'jack & jones': 'Bestseller',
+  'vero moda': 'Bestseller',
+  'only': 'Bestseller',
+  'bestseller': 'Bestseller',
 };
 
 function resolveCompanyName(brand: string): string {
@@ -104,16 +147,15 @@ export async function getFashionTransparencyScore(
   const currentYear = new Date().getFullYear();
   const years = [currentYear - 1, currentYear - 2];
 
+  // Encode company name for URL: spaces → underscores, & → %26
+  const companySlug = companyName.replace(/\s+/g, '_').replace(/&/g, '%26');
+
   for (const year of years) {
     try {
-      const url = new URL('https://wikirate.org/answers.json');
-      url.searchParams.set('metric_designer', 'Fashion_Revolution');
-      url.searchParams.set('metric_name', 'Fashion_Transparency_Index');
-      url.searchParams.set('company_name', companyName);
-      url.searchParams.set('year', String(year));
-      url.searchParams.set('limit', '1');
+      // Direct card endpoint — fetches exactly this company+metric+year, no filter ambiguity
+      const endpointUrl = `https://wikirate.org/Fashion_Revolution+Fashion_Transparency_Index+${companySlug}+${year}.json`;
 
-      const response = await fetch(url.toString(), {
+      const response = await fetch(endpointUrl, {
         headers: {
           'X-API-Key': apiKey,
           'Accept': 'application/json',
@@ -121,39 +163,41 @@ export async function getFashionTransparencyScore(
         signal: AbortSignal.timeout(8_000),
       });
 
+      if (response.status === 404) {
+        // This company/year combo isn't in WikiRate — try next year
+        log.info('WikiRate: no FTI record', { stage: 'cost', brand: companyName, year });
+        continue;
+      }
+
       if (!response.ok) {
         log.warn('WikiRate request failed', { stage: 'cost', status: response.status, year });
         continue;
       }
 
-      const raw = await response.json();
+      const raw = await response.json() as WikiRateAnswer;
       log.info('WikiRate raw response', { stage: 'cost', brand: companyName, year, raw: JSON.stringify(raw).slice(0, 500) });
 
-      // API may return an array directly or { items: [...] }
-      const items: WikiRateAnswer[] = Array.isArray(raw)
-        ? (raw as WikiRateAnswer[])
-        : Array.isArray((raw as { items?: WikiRateAnswer[] }).items)
-          ? ((raw as { items: WikiRateAnswer[] }).items)
-          : [];
-
-      const item = items[0];
-      if (!item) continue;
-
-      const rawValue = item.value ?? item.answer ?? item.numeric;
+      const rawValue = raw.value ?? raw.answer ?? raw.numeric;
       const score = typeof rawValue === 'number'
         ? rawValue
         : parseFloat(String(rawValue ?? ''));
 
       if (isNaN(score)) continue;
 
+      const resolvedYear = raw.year ?? year;
+      const html_url = typeof raw.html_url === 'string' && raw.html_url.startsWith('http')
+        ? raw.html_url
+        : `https://wikirate.org/Fashion_Revolution+Fashion_Transparency_Index+${companySlug}+${resolvedYear}`;
+
       const result: WikiRateResult = {
         score: Math.round(score),
-        year: item.year ?? year,
+        year: resolvedYear,
         brand: companyName,
+        url: html_url,
       };
 
       cache.set(cacheKey, { result, cachedAt: Date.now() });
-      log.info('WikiRate FTI score fetched', { stage: 'cost', brand: companyName, score, year });
+      log.info('WikiRate FTI score fetched', { stage: 'cost', brand: companyName, score, year, url: result.url });
       return result;
     } catch (err) {
       log.warn('WikiRate fetch error', { stage: 'cost', brand: companyName, year, err: String(err) });
