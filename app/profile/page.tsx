@@ -55,14 +55,14 @@ function ScoreDot({ score }: { score: number }) {
 
 function ClosetItem({ label, fiber, score, date, img }: (typeof MOCK_SCANS)[number]) {
   return (
-    <div className="flex flex-col items-center" style={{ minWidth: 140 }}>
+    <div className="flex flex-col items-center" style={{ minWidth: 210 }}>
       {/* hanger on top */}
       <Image
         src="/images/hanger.png"
         alt=""
         width={140}
         height={80}
-        className="w-[90px] h-auto object-contain relative z-10 mb-[-18px]"
+        className="w-[135px] h-auto object-contain relative z-10 mb-[-27px]"
       />
 
       {/* garment card */}
@@ -125,7 +125,7 @@ export default function ProfilePage() {
 
         {/* ── Rank card with rankingframe ── */}
         <div className="flex justify-center">
-          <div className="relative w-full max-w-[340px]">
+          <div className="relative w-full max-w-[227px]">
             <Image
               src="/images/rankingframe.png"
               alt="Ranking frame"
@@ -182,7 +182,7 @@ export default function ProfilePage() {
             style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
           >
             {MOCK_SCANS.map((scan) => (
-              <div key={scan.id} style={{ scrollSnapAlign: 'start', minWidth: 140, width: 140 }}>
+              <div key={scan.id} style={{ scrollSnapAlign: 'start', minWidth: 210, width: 210 }}>
                 <ClosetItem {...scan} />
               </div>
             ))}
