@@ -246,12 +246,12 @@ export function ResultView({ id }: ResultViewProps) {
 
                 {/* Details */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-[22px] font-bold text-ink leading-tight">
+                  <p className="text-[25px] font-bold text-ink leading-tight">
                     {data.result.garment.category ?? 'Unknown'}
                   </p>
                   <p className="text-[14px] text-ink-muted mt-0.5">{data.result.garment.brand ?? 'Unknown brand'}</p>
 
-                  {data.result.fti && (() => {
+                  {data.result.fti ? (() => {
                     const { score, year } = data.result.fti!;
                     const color = score >= 61 ? '#5E8B6C' : score >= 41 ? '#C8A24A' : score >= 21 ? '#B07D2E' : '#B23A2B';
                     const label = score >= 61 ? 'High' : score >= 41 ? 'Moderate' : score >= 21 ? 'Low' : 'Very Low';
@@ -270,7 +270,11 @@ export function ResultView({ id }: ResultViewProps) {
                         <span className="text-[10px] text-ink-faint">FTI {year}</span>
                       </div>
                     );
-                  })()}
+                  })() : (
+                    <p className="text-[11px] text-ink-faint mt-1.5 italic">
+                      Rethread couldn&apos;t find any info on this brand.
+                    </p>
+                  )}
 
                   {data.result.garment.color && (
                     <div className="flex items-center gap-2 mt-3">
@@ -390,20 +394,26 @@ export function ResultView({ id }: ResultViewProps) {
                   style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(-1.5deg)' }}
                 >
                   <p className="text-[9px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
-                  <p className="text-[20px] font-bold text-ink leading-none">
+                  <p className="text-[23px] font-bold text-ink leading-none">
                     {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
                   </p>
                   <p className="text-[9px] text-ink font-medium mt-1">gallons</p>
+                  <p className="text-[8px] text-ink-muted mt-2 leading-tight">
+                    est. based on <a href="https://waterfootprint.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">WaterFootprint.org</a><br/>per-fiber LCA data
+                  </p>
                 </div>
                 <div
                   className="p-6 text-center"
                   style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(1.2deg)' }}
                 >
                   <p className="text-[9px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
-                  <p className="text-[20px] font-bold text-ink leading-none">
+                  <p className="text-[23px] font-bold text-ink leading-none">
                     {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
                   </p>
                   <p className="text-[9px] text-ink font-medium mt-1">pounds</p>
+                  <p className="text-[8px] text-ink-muted mt-2 leading-tight">
+                    est. based on <a href="https://textileexchange.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">Textile Exchange</a><br/>per-fiber LCA data
+                  </p>
                 </div>
               </div>
 
