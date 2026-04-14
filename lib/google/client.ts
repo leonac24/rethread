@@ -40,6 +40,7 @@ export function getGoogleCredentials() {
 
   const filePath = process.env.GOOGLE_APPLICATION_CREDENTIALS_FILE;
   if (filePath) {
+    // readFileSync is acceptable here — called at most once due to caching above
     const contents = readFileSync(filePath, 'utf8');
     cachedCredentials = parseCredentials(contents);
     return cachedCredentials;
@@ -53,7 +54,12 @@ export function getGoogleCredentials() {
 
   const base64Json = process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64;
   if (base64Json) {
-    const decoded = Buffer.from(base64Json, 'base64').toString('utf8');
+    let decoded: string;
+    try {
+      decoded = Buffer.from(base64Json, 'base64').toString('utf8');
+    } catch {
+      throw new Error('Failed to decode GOOGLE_APPLICATION_CREDENTIALS_BASE64: invalid base64');
+    }
     cachedCredentials = parseCredentials(decoded);
     return cachedCredentials;
   }
@@ -70,22 +76,38 @@ export async function getGoogleCredentialsFromFile(
   return parseCredentials(contents);
 }
 
-export async function getGoogleAccessToken(scopes: string | string[]) {
-  const credentials = getGoogleCredentials();
-  const auth = new GoogleAuth({
-    credentials: {
-      type: 'service_account',
-      project_id: credentials.projectId,
-      client_email: credentials.clientEmail,
-      private_key: credentials.privateKey,
-    },
-    scopes,
-  });
+// Cached GoogleAuth instance and token — avoids creating a new auth client on every request
+let authInstance: GoogleAuth | null = null;
+let tokenCache: { token: string; expiresAt: number } | null = null;
 
-  const token = await auth.getAccessToken();
+export async function getGoogleAccessToken(scopes: string | string[]) {
+  const now = Date.now();
+
+  // Return cached token if it has more than 60 seconds of life left
+  if (tokenCache && now < tokenCache.expiresAt - 60_000) {
+    return tokenCache.token;
+  }
+
+  const credentials = getGoogleCredentials();
+
+  if (!authInstance) {
+    authInstance = new GoogleAuth({
+      credentials: {
+        type: 'service_account',
+        project_id: credentials.projectId,
+        client_email: credentials.clientEmail,
+        private_key: credentials.privateKey,
+      },
+      scopes,
+    });
+  }
+
+  const token = await authInstance.getAccessToken();
   if (!token) {
     throw new Error('Failed to obtain Google access token.');
   }
 
+  // Tokens expire in 1 hour; cache for 50 minutes
+  tokenCache = { token, expiresAt: now + 50 * 60 * 1000 };
   return token;
 }

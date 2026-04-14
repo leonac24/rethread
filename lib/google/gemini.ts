@@ -1,4 +1,5 @@
 import type { EnvironmentalCost, Garment } from '@/types/garment';
+import { log } from '@/lib/logger';
 
 // Gemini — structured environmental-cost reasoning + garment image analysis.
 // Enforce responseSchema so output always matches expected types.
@@ -13,7 +14,36 @@ type GeminiResponse = {
   }>;
 };
 
+// Sanitize user-controlled strings before embedding in prompts.
+// Strips newlines and characters that could be used for prompt injection.
+function sanitizeForPrompt(s: string | undefined, max = 100): string {
+  if (!s) return '';
+  return s
+    .replace(/[\n\r]/g, ' ')
+    .replace(/[^\w\s\-.,()]/g, '')
+    .slice(0, max)
+    .trim();
+}
+
+// Sanitize Gemini-generated text before storing or displaying.
+function sanitizeResponseText(s: string, maxLen = 200): string {
+  return s
+    .replace(/<[^>]*>/g, '')
+    .replace(/[^\x20-\x7E]/g, '')
+    .slice(0, maxLen)
+    .trim();
+}
+
 function buildPrompt(garment: Garment, brandContext?: string) {
+  // Sanitize all user-controlled fields before embedding in prompt
+  const safeGarment = {
+    fibers: garment.fibers,
+    origin: sanitizeForPrompt(garment.origin ?? undefined),
+    category: sanitizeForPrompt(garment.category ?? undefined),
+    brand: sanitizeForPrompt(garment.brand),
+    color: sanitizeForPrompt(garment.color),
+  };
+
   return [
     'You are an apparel lifecycle analyst.',
     'Estimate environmental cost for a single garment using known apparel benchmarks and conservative assumptions.',
@@ -22,8 +52,11 @@ function buildPrompt(garment: Garment, brandContext?: string) {
     'Keep the reasoning field under 60 words.',
     'Return only valid JSON matching schema.',
     '',
-    `Garment JSON: ${JSON.stringify(garment)}`,
-    brandContext ? `Brand context: ${brandContext}` : 'Brand context: none',
+    '--- GARMENT DATA (user-provided) ---',
+    JSON.stringify(safeGarment),
+    '--- END GARMENT DATA ---',
+    '',
+    brandContext ? `Brand context: ${sanitizeForPrompt(brandContext, 500)}` : 'Brand context: none',
     '',
     'Benchmark hints (guidance, not hard constraints):',
     '- Cotton tends to be water-intensive in raw fiber stage.',
@@ -32,7 +65,7 @@ function buildPrompt(garment: Garment, brandContext?: string) {
     '- Origin country may affect average grid intensity and wastewater treatment reliability.',
     '- Category affects mass assumptions (e.g., t-shirt < hoodie < jeans).',
     '',
-    'If a color is present in the garment JSON, identify the most likely dye family used to achieve it',
+    'If a color is present in the garment data, identify the most likely dye family used to achieve it',
     '(e.g. "synthetic reactive dye", "vat dye", "acid dye", "natural indigo", "disperse dye") and',
     'include reasoning about its environmental impact in dye_type and dye_reasoning.',
     'If no color is present, omit dye_type and dye_reasoning.',
@@ -65,9 +98,9 @@ function normalizeCost(value: unknown): EnvironmentalCost {
     co2_kg: Number(candidate.co2_kg.toFixed(2)),
     dye_pollution_score: dyeScore,
     confidence,
-    reasoning: candidate.reasoning.trim(),
-    ...(candidate.dye_type ? { dye_type: candidate.dye_type.trim() } : {}),
-    ...(candidate.dye_reasoning ? { dye_reasoning: candidate.dye_reasoning.trim() } : {}),
+    reasoning: sanitizeResponseText(candidate.reasoning.trim(), 200),
+    ...(candidate.dye_type ? { dye_type: sanitizeResponseText(candidate.dye_type.trim(), 100) } : {}),
+    ...(candidate.dye_reasoning ? { dye_reasoning: sanitizeResponseText(candidate.dye_reasoning.trim(), 200) } : {}),
   };
 }
 
@@ -75,6 +108,10 @@ function getApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('Missing GEMINI_API_KEY');
   return apiKey;
+}
+
+function geminiUrl(apiKey: string): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
 }
 
 export async function computeCost(
@@ -86,39 +123,38 @@ export async function computeCost(
 
   const hasDyeFields = !!garment.color;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            required: ['water_liters', 'co2_kg', 'dye_pollution_score', 'confidence', 'reasoning'],
-            properties: {
-              water_liters: { type: 'NUMBER' },
-              co2_kg: { type: 'NUMBER' },
-              dye_pollution_score: { type: 'NUMBER' },
-              confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
-              reasoning: { type: 'STRING' },
-              ...(hasDyeFields
-                ? {
-                    dye_type: { type: 'STRING' },
-                    dye_reasoning: { type: 'STRING' },
-                  }
-                : {}),
-            },
+  const response = await fetch(geminiUrl(apiKey), {
+    method: 'POST',
+    signal: AbortSignal.timeout(20_000),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          required: ['water_liters', 'co2_kg', 'dye_pollution_score', 'confidence', 'reasoning'],
+          properties: {
+            water_liters: { type: 'NUMBER' },
+            co2_kg: { type: 'NUMBER' },
+            dye_pollution_score: { type: 'NUMBER' },
+            confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+            reasoning: { type: 'STRING' },
+            ...(hasDyeFields
+              ? {
+                  dye_type: { type: 'STRING' },
+                  dye_reasoning: { type: 'STRING' },
+                }
+              : {}),
           },
         },
-      }),
-    },
-  );
+      },
+    }),
+  });
 
   if (!response.ok) {
     const text = await response.text();
+    log.error('Gemini cost request failed', undefined, { stage: 'cost', status: response.status });
     throw new Error(`Gemini request failed (${response.status}): ${text}`);
   }
 
@@ -157,38 +193,37 @@ export async function analyzeGarmentImage(
     'Return only valid JSON matching the schema.',
   ].join(' ');
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { inlineData: { mimeType, data: base64Image } },
-              { text: prompt },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            required: ['category', 'color'],
-            properties: {
-              category: { type: 'STRING' },
-              color: { type: 'STRING' },
-            },
+  const response = await fetch(geminiUrl(apiKey), {
+    method: 'POST',
+    signal: AbortSignal.timeout(20_000),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType, data: base64Image } },
+            { text: prompt },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          required: ['category', 'color'],
+          properties: {
+            category: { type: 'STRING' },
+            color: { type: 'STRING' },
           },
         },
-      }),
-    },
-  );
+      },
+    }),
+  });
 
   if (!response.ok) {
     const text = await response.text();
+    log.error('Gemini image analysis failed', undefined, { stage: 'ingest', status: response.status });
     throw new Error(`Gemini image analysis failed (${response.status}): ${text}`);
   }
 
