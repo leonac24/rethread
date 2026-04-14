@@ -1,4 +1,4 @@
-:root {
+.page {
   --bg: #efeee8;
   --panel: #f7f6f1;
   --card: #f1f0ea;
@@ -7,9 +7,6 @@
   --accent: #3f5338;
   --chip: #e7e8df;
   --outline: #dbddd2;
-}
-
-.page {
   min-height: 100dvh;
   background: var(--bg);
   color: var(--ink);
