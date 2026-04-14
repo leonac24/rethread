@@ -1,6 +1,5 @@
 import { analyzeGarmentImage, computeCost, computeLandfillImpact } from '@/lib/google/gemini';
-import { getBrandContext } from '@/lib/google/bigquery';
-import { getFashionTransparencyScore, formatFtiContext } from '@/lib/wikirate';
+import { getFashionTransparencyScore } from '@/lib/wikirate';
 import { findRoutes } from '@/lib/google/places';
 import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/vision';
 import { saveScanResult } from '@/lib/scan-store';
@@ -223,22 +222,13 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     reqLog.warn('No coords on request — using fallback routes', { stage: 'route' });
   }
 
+  // Fire all external lookups and both Gemini calls in parallel — nothing gates anything else
   const ftiPromise = getFashionTransparencyScore(garment.brand ?? '').catch((err) => {
     reqLog.warn('WikiRate FTI lookup failed', { stage: 'cost', err: String(err) });
     return null;
   });
 
-  const costPromise = Promise.all([
-    getBrandContext(garment.brand ?? '').catch((err) => {
-      reqLog.warn('BigQuery brand context failed, proceeding without it', { stage: 'cost', err: err instanceof Error ? err.message : String(err) });
-      return null;
-    }),
-    ftiPromise,
-  ]).then(([brandContext, fti]) => {
-    const ftiContext = fti ? formatFtiContext(fti) : null;
-    const combinedContext = [brandContext, ftiContext].filter(Boolean).join('\n') || undefined;
-    return computeCost(garment, combinedContext);
-  }).catch((err) => {
+  const costPromise = computeCost(garment).catch((err) => {
     reqLog.error('Gemini cost estimation failed, returning fallback', err, { stage: 'cost' });
     return {
       water_liters: 0,

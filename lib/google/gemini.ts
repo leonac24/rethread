@@ -2,6 +2,7 @@ import type { EnvironmentalCost, Garment, LandfillImpact } from '@/types/garment
 import { log } from '@/lib/logger';
 import { GEMINI_TIMEOUT_MS } from '@/lib/config';
 import { withRetry, HttpError } from '@/lib/retry';
+import { computeFiberImpact } from '@/lib/fiber-impact';
 
 // Gemini — structured environmental-cost reasoning + garment image analysis.
 // Enforce responseSchema so output always matches expected types.
@@ -37,7 +38,6 @@ function sanitizeResponseText(s: string, maxLen = 200): string {
 }
 
 function buildPrompt(garment: Garment, brandContext?: string) {
-  // Sanitize all user-controlled fields before embedding in prompt
   const safeGarment = {
     fibers: garment.fibers,
     origin: sanitizeForPrompt(garment.origin ?? undefined),
@@ -47,12 +47,11 @@ function buildPrompt(garment: Garment, brandContext?: string) {
   };
 
   return [
-    'You are an apparel lifecycle analyst.',
-    'Estimate environmental cost for a single garment using known apparel benchmarks and conservative assumptions.',
-    'Focus on water use, CO2 emissions, and dye pollution risk from fiber blend + origin country + category.',
-    'If data is missing, use sensible defaults and lower confidence accordingly.',
-    'Keep the reasoning field under 60 words.',
-    'Return only valid JSON matching schema.',
+    'You are a textile dye and pollution analyst.',
+    'Water and CO2 figures have already been calculated from a lookup table — do NOT estimate them.',
+    'Your job is to assess dye pollution risk and write a brief environmental summary.',
+    'Focus on: fiber blend + color + origin country + brand transparency.',
+    'Keep reasoning under 60 words. Return only valid JSON matching schema.',
     '',
     '--- GARMENT DATA (user-provided) ---',
     JSON.stringify(safeGarment),
@@ -60,45 +59,51 @@ function buildPrompt(garment: Garment, brandContext?: string) {
     '',
     brandContext ? `Brand context: ${sanitizeForPrompt(brandContext, 500)}` : 'Brand context: none',
     '',
-    'Benchmark hints (guidance, not hard constraints):',
-    '- Cotton tends to be water-intensive in raw fiber stage.',
-    '- Polyester tends to be lower-water but higher fossil CO2 than natural fibers.',
-    '- Dye pollution risk rises with synthetic dyes, mixed fibers, and weak wastewater controls.',
-    '- Origin country may affect average grid intensity and wastewater treatment reliability.',
-    '- Category affects mass assumptions (e.g., t-shirt < hoodie < jeans).',
+    'Scoring guidance for dye_pollution_score (1–10):',
+    '- Synthetic dyes (reactive, disperse, acid) on synthetic or blended fibers: higher risk (6–9)',
+    '- Natural or low-impact dyes on natural fibers: lower risk (1–4)',
+    '- Mixed fibers often require multiple dye types: moderate–high risk',
+    '- Weak wastewater controls in origin country increase risk',
+    '- High brand transparency score (>60) may indicate better dye practices',
     '',
-    'If a color is present in the garment data, identify the most likely dye family used to achieve it',
-    '(e.g. "synthetic reactive dye", "vat dye", "acid dye", "natural indigo", "disperse dye") and',
-    'include reasoning about its environmental impact in dye_type and dye_reasoning.',
-    'If no color is present, omit dye_type and dye_reasoning.',
+    'If a color is present, identify the most likely dye family',
+    '(e.g. "synthetic reactive dye", "vat dye", "acid dye", "natural indigo", "disperse dye")',
+    'and include dye_type and dye_reasoning. Omit both if no color is present.',
+    '',
+    'Set confidence based on how much information is available:',
+    '- high: fiber blend + color + origin all known',
+    '- medium: some fields missing',
+    '- low: most fields unknown',
   ].join('\n');
 }
 
-function normalizeCost(value: unknown): EnvironmentalCost {
+type DyeAnalysis = {
+  dye_pollution_score: number;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
+  dye_type?: string;
+  dye_reasoning?: string;
+};
+
+function normalizeDyeAnalysis(value: unknown): DyeAnalysis {
   if (!value || typeof value !== 'object') {
     throw new Error('Gemini response is not an object.');
   }
 
-  const candidate = value as Partial<EnvironmentalCost>;
+  const candidate = value as Partial<DyeAnalysis>;
   const confidence = candidate.confidence;
 
   if (
-    typeof candidate.water_liters !== 'number' ||
-    typeof candidate.co2_kg !== 'number' ||
     typeof candidate.dye_pollution_score !== 'number' ||
     typeof candidate.reasoning !== 'string' ||
     !confidence ||
     !['high', 'medium', 'low'].includes(confidence)
   ) {
-    throw new Error('Gemini response does not match EnvironmentalCost schema.');
+    throw new Error('Gemini response does not match dye analysis schema.');
   }
 
-  const dyeScore = Math.max(1, Math.min(10, Math.round(candidate.dye_pollution_score)));
-
   return {
-    water_liters: Math.max(0, Number(candidate.water_liters.toFixed(2))),
-    co2_kg: Math.max(0, Number(candidate.co2_kg.toFixed(2))),
-    dye_pollution_score: dyeScore,
+    dye_pollution_score: Math.max(1, Math.min(10, Math.round(candidate.dye_pollution_score))),
     confidence,
     reasoning: sanitizeResponseText(candidate.reasoning.trim(), 200),
     ...(candidate.dye_type ? { dye_type: sanitizeResponseText(candidate.dye_type.trim(), 100) } : {}),
@@ -126,9 +131,20 @@ export async function computeCost(
   garment: Garment,
   brandContext?: string,
 ): Promise<EnvironmentalCost> {
+  // Water and CO2 come from the fiber lookup table — real LCA data, not AI estimates.
+  const { water_liters, co2_kg, coverage } = computeFiberImpact(garment.fibers, garment.category);
+  log.info('Fiber impact calculated', {
+    stage: 'cost',
+    fibers: garment.fibers.map((f) => `${f.percentage}% ${f.material}`).join(', '),
+    category: garment.category ?? 'unknown',
+    water_liters,
+    co2_kg,
+    coverage_pct: Math.round(coverage * 100),
+  });
+
+  // Gemini handles only dye pollution scoring and reasoning.
   const apiKey = getApiKey();
   const prompt = buildPrompt(garment, brandContext);
-
   const hasDyeFields = !!garment.color;
 
   const data = await withRetry(async () => {
@@ -142,10 +158,8 @@ export async function computeCost(
           responseMimeType: 'application/json',
           responseSchema: {
             type: 'OBJECT',
-            required: ['water_liters', 'co2_kg', 'dye_pollution_score', 'confidence', 'reasoning'],
+            required: ['dye_pollution_score', 'confidence', 'reasoning'],
             properties: {
-              water_liters: { type: 'NUMBER' },
-              co2_kg: { type: 'NUMBER' },
               dye_pollution_score: { type: 'NUMBER' },
               confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
               reasoning: { type: 'STRING' },
@@ -167,8 +181,8 @@ export async function computeCost(
     }
     return response.json() as Promise<GeminiResponse>;
   }, { retries: 3, label: 'Gemini' });
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!rawText) throw new Error('Gemini returned no content.');
 
   let parsed: unknown;
@@ -178,7 +192,13 @@ export async function computeCost(
     throw new Error(`Gemini returned non-JSON content: ${rawText}`);
   }
 
-  return normalizeCost(parsed);
+  const dye = normalizeDyeAnalysis(parsed);
+
+  return {
+    water_liters,
+    co2_kg,
+    ...dye,
+  };
 }
 
 export type GarmentImageAnalysis = {
