@@ -44,9 +44,17 @@ export default function RootLayout({
       className={`${inter.variable} ${fraunces.variable} ${jetbrainsMono.variable} ${architectsDaughter.variable}`}
     >
       <body>
-        <a href="/" className="relative z-20 flex justify-center mt-4 mb-2 md:-mb-[80px]">
-          <Image src="/images/hero.webp" alt="Rethread" width={100} height={100} className="w-[100px] h-auto object-contain" />
-        </a>
+        <header className="relative z-20 flex items-center justify-between px-5 pt-4 pb-2 md:pb-0">
+          <a href="/">
+            <Image src="/images/hero.webp" alt="Rethread" width={100} height={100} className="w-[100px] h-auto object-contain" />
+          </a>
+          <a
+            href="/profile"
+            className="mr-5 text-[14px] font-medium text-ink border border-rule rounded-md px-4 py-1.5 hover:bg-surface transition-colors"
+          >
+            Profile
+          </a>
+        </header>
         {children}
       </body>
     </html>
