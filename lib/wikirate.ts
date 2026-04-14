@@ -17,8 +17,6 @@ type WikiRateAnswer = {
   numeric?: number | string;
   year?: number;
   company?: string;
-  company_name?: string;
-  url?: string;
   html_url?: string;
 };
 
@@ -149,15 +147,15 @@ export async function getFashionTransparencyScore(
   const currentYear = new Date().getFullYear();
   const years = [currentYear - 1, currentYear - 2];
 
+  // Encode company name for URL: spaces → underscores, & → %26
+  const companySlug = companyName.replace(/\s+/g, '_').replace(/&/g, '%26');
+
   for (const year of years) {
     try {
-      // Use the metric-specific card endpoint — the generic /answers.json doesn't filter by metric reliably
-      const url = new URL('https://wikirate.org/Fashion_Revolution+Fashion_Transparency_Index+Answers.json');
-      url.searchParams.set('company_name', companyName);
-      url.searchParams.set('year', String(year));
-      url.searchParams.set('limit', '1');
+      // Direct card endpoint — fetches exactly this company+metric+year, no filter ambiguity
+      const endpointUrl = `https://wikirate.org/Fashion_Revolution+Fashion_Transparency_Index+${companySlug}+${year}.json`;
 
-      const response = await fetch(url.toString(), {
+      const response = await fetch(endpointUrl, {
         headers: {
           'X-API-Key': apiKey,
           'Accept': 'application/json',
@@ -165,47 +163,37 @@ export async function getFashionTransparencyScore(
         signal: AbortSignal.timeout(8_000),
       });
 
+      if (response.status === 404) {
+        // This company/year combo isn't in WikiRate — try next year
+        log.info('WikiRate: no FTI record', { stage: 'cost', brand: companyName, year });
+        continue;
+      }
+
       if (!response.ok) {
         log.warn('WikiRate request failed', { stage: 'cost', status: response.status, year });
         continue;
       }
 
-      const raw = await response.json();
-      log.info('WikiRate raw response', { stage: 'cost', brand: companyName, year, raw: JSON.stringify(raw).slice(0, 1000) });
+      const raw = await response.json() as WikiRateAnswer;
+      log.info('WikiRate raw response', { stage: 'cost', brand: companyName, year, raw: JSON.stringify(raw).slice(0, 500) });
 
-      // API may return an array directly or { items: [...] }
-      const items: WikiRateAnswer[] = Array.isArray(raw)
-        ? (raw as WikiRateAnswer[])
-        : Array.isArray((raw as { items?: WikiRateAnswer[] }).items)
-          ? ((raw as { items: WikiRateAnswer[] }).items)
-          : [];
-
-      const item = items[0];
-      if (!item) continue;
-
-      const rawValue = item.value ?? item.answer ?? item.numeric;
+      const rawValue = raw.value ?? raw.answer ?? raw.numeric;
       const score = typeof rawValue === 'number'
         ? rawValue
         : parseFloat(String(rawValue ?? ''));
 
       if (isNaN(score)) continue;
 
-      const resolvedYear = item.year ?? year;
-      // Prefer the URL returned directly by the API; fall back to a constructed one
-      const rawItemUrl = item.html_url ?? item.url;
-      const slug = companyName.replace(/\s+/g, '_').replace(/[&]/g, '%26');
-      const fallbackUrl = `https://wikirate.org/${slug}+Fashion_Revolution+Fashion_Transparency_Index`;
-      let resolvedUrl = fallbackUrl;
-      if (typeof rawItemUrl === 'string' && rawItemUrl.length > 0) {
-        resolvedUrl = rawItemUrl.startsWith('http')
-          ? rawItemUrl
-          : `https://wikirate.org${rawItemUrl.startsWith('/') ? '' : '/'}${rawItemUrl}`;
-      }
+      const resolvedYear = raw.year ?? year;
+      const html_url = typeof raw.html_url === 'string' && raw.html_url.startsWith('http')
+        ? raw.html_url
+        : `https://wikirate.org/Fashion_Revolution+Fashion_Transparency_Index+${companySlug}+${resolvedYear}`;
+
       const result: WikiRateResult = {
         score: Math.round(score),
         year: resolvedYear,
         brand: companyName,
-        url: resolvedUrl,
+        url: html_url,
       };
 
       cache.set(cacheKey, { result, cachedAt: Date.now() });
