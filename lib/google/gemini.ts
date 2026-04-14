@@ -1,5 +1,7 @@
 import type { EnvironmentalCost, Garment } from '@/types/garment';
 import { log } from '@/lib/logger';
+import { GEMINI_TIMEOUT_MS } from '@/lib/config';
+import { withRetry, HttpError } from '@/lib/retry';
 
 // Gemini — structured environmental-cost reasoning + garment image analysis.
 // Enforce responseSchema so output always matches expected types.
@@ -94,8 +96,8 @@ function normalizeCost(value: unknown): EnvironmentalCost {
   const dyeScore = Math.max(1, Math.min(10, Math.round(candidate.dye_pollution_score)));
 
   return {
-    water_liters: Number(candidate.water_liters.toFixed(2)),
-    co2_kg: Number(candidate.co2_kg.toFixed(2)),
+    water_liters: Math.max(0, Number(candidate.water_liters.toFixed(2))),
+    co2_kg: Math.max(0, Number(candidate.co2_kg.toFixed(2))),
     dye_pollution_score: dyeScore,
     confidence,
     reasoning: sanitizeResponseText(candidate.reasoning.trim(), 200),
@@ -104,14 +106,20 @@ function normalizeCost(value: unknown): EnvironmentalCost {
   };
 }
 
+const GEMINI_ENDPOINT =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
 function getApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('Missing GEMINI_API_KEY');
   return apiKey;
 }
 
-function geminiUrl(apiKey: string): string {
-  return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+function geminiHeaders(apiKey: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'x-goog-api-key': apiKey,
+  };
 }
 
 export async function computeCost(
@@ -123,42 +131,42 @@ export async function computeCost(
 
   const hasDyeFields = !!garment.color;
 
-  const response = await fetch(geminiUrl(apiKey), {
-    method: 'POST',
-    signal: AbortSignal.timeout(20_000),
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          required: ['water_liters', 'co2_kg', 'dye_pollution_score', 'confidence', 'reasoning'],
-          properties: {
-            water_liters: { type: 'NUMBER' },
-            co2_kg: { type: 'NUMBER' },
-            dye_pollution_score: { type: 'NUMBER' },
-            confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
-            reasoning: { type: 'STRING' },
-            ...(hasDyeFields
-              ? {
-                  dye_type: { type: 'STRING' },
-                  dye_reasoning: { type: 'STRING' },
-                }
-              : {}),
+  const data = await withRetry(async () => {
+    const response = await fetch(GEMINI_ENDPOINT, {
+      method: 'POST',
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+      headers: geminiHeaders(apiKey),
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            required: ['water_liters', 'co2_kg', 'dye_pollution_score', 'confidence', 'reasoning'],
+            properties: {
+              water_liters: { type: 'NUMBER' },
+              co2_kg: { type: 'NUMBER' },
+              dye_pollution_score: { type: 'NUMBER' },
+              confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+              reasoning: { type: 'STRING' },
+              ...(hasDyeFields
+                ? {
+                    dye_type: { type: 'STRING' },
+                    dye_reasoning: { type: 'STRING' },
+                  }
+                : {}),
+            },
           },
         },
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    log.error('Gemini cost request failed', undefined, { stage: 'cost', status: response.status });
-    throw new Error(`Gemini request failed (${response.status}): ${text}`);
-  }
-
-  const data = (await response.json()) as GeminiResponse;
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      log.error('Gemini cost request failed', undefined, { stage: 'cost', status: response.status });
+      throw new HttpError(response.status, `Gemini request failed (${response.status}): ${text}`);
+    }
+    return response.json() as Promise<GeminiResponse>;
+  }, { retries: 3, label: 'Gemini' });
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!rawText) throw new Error('Gemini returned no content.');
@@ -193,10 +201,10 @@ export async function analyzeGarmentImage(
     'Return only valid JSON matching the schema.',
   ].join(' ');
 
-  const response = await fetch(geminiUrl(apiKey), {
+  const response = await fetch(GEMINI_ENDPOINT, {
     method: 'POST',
-    signal: AbortSignal.timeout(20_000),
-    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+    headers: geminiHeaders(apiKey),
     body: JSON.stringify({
       contents: [
         {

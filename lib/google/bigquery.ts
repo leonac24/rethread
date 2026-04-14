@@ -3,6 +3,8 @@
 
 import { getGoogleAccessToken, getGoogleCredentials } from '@/lib/google/client';
 import { log } from '@/lib/logger';
+import { BRAND_CACHE_TTL_MS, BIGQUERY_TIMEOUT_MS } from '@/lib/config';
+import { withRetry, HttpError } from '@/lib/retry';
 
 type BigQueryQueryResponse = {
   rows?: Array<{
@@ -16,7 +18,6 @@ const COLUMN_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]{0,127}$/;
 
 // In-memory brand context cache — avoids redundant BigQuery calls for the same brand
 const brandCache = new Map<string, { result: string | null; cachedAt: number }>();
-const BRAND_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 function resolveTableRef(tableInput: string, defaultProject: string) {
   const parts = tableInput.split('.').filter(Boolean);
@@ -45,7 +46,9 @@ function resolveTableRef(tableInput: string, defaultProject: string) {
 export async function getBrandContext(
   brand: string,
 ): Promise<string | null> {
-  if (!brand?.trim()) {
+  if (!brand?.trim()) return null;
+  if (brand.length > 256) {
+    log.warn('Brand string too long, skipping BigQuery lookup', { stage: 'cost', length: brand.length });
     return null;
   }
 
@@ -53,7 +56,7 @@ export async function getBrandContext(
 
   // Return from cache if still fresh
   const cached = brandCache.get(brandKey);
-  if (cached && Date.now() - cached.cachedAt < BRAND_CACHE_TTL) {
+  if (cached && Date.now() - cached.cachedAt < BRAND_CACHE_TTL_MS) {
     return cached.result;
   }
 
@@ -96,37 +99,37 @@ export async function getBrandContext(
     LIMIT 1
   `;
 
-  const response = await fetch(
-    `https://bigquery.googleapis.com/bigquery/v2/projects/${projectId}/queries`,
-    {
-      method: 'POST',
-      signal: AbortSignal.timeout(10_000),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+  const data = await withRetry(async () => {
+    const response = await fetch(
+      `https://bigquery.googleapis.com/bigquery/v2/projects/${projectId}/queries`,
+      {
+        method: 'POST',
+        signal: AbortSignal.timeout(BIGQUERY_TIMEOUT_MS),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          useLegacySql: false,
+          maxResults: 1,
+          parameterMode: 'NAMED',
+          queryParameters: [
+            {
+              name: 'brand',
+              parameterType: { type: 'STRING' },
+              parameterValue: { value: brand.trim() },
+            },
+          ],
+        }),
       },
-      body: JSON.stringify({
-        query,
-        useLegacySql: false,
-        maxResults: 1,
-        parameterMode: 'NAMED',
-        queryParameters: [
-          {
-            name: 'brand',
-            parameterType: { type: 'STRING' },
-            parameterValue: { value: brand.trim() },
-          },
-        ],
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`BigQuery request failed (${response.status}): ${text}`);
-  }
-
-  const data = (await response.json()) as BigQueryQueryResponse;
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      throw new HttpError(response.status, `BigQuery request failed (${response.status}): ${text}`);
+    }
+    return response.json() as Promise<BigQueryQueryResponse>;
+  }, { retries: 2, label: 'BigQuery' });
   if (data.errors?.length) {
     throw new Error(`BigQuery error: ${data.errors[0]?.message || 'Unknown error'}`);
   }

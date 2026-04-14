@@ -1,7 +1,9 @@
 import type { ScanResult } from '@/types/garment';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { log } from '@/lib/logger';
+import { SCAN_TTL_MS, MAX_SCAN_BYTES } from '@/lib/config';
 
 type StoredScan = {
   id: string;
@@ -10,10 +12,9 @@ type StoredScan = {
   createdAt: number;
 };
 
-const SCAN_TTL_MS = 1000 * 60 * 30;
-const MAX_RESULT_BYTES = 1_000_000; // 1 MB
 const scans = new Map<string, StoredScan>();
-const STORE_DIR = join('/tmp', '.scan-cache');
+// Use os.tmpdir() for cross-platform correctness (Linux /tmp, Windows %TEMP%)
+const STORE_DIR = join(tmpdir(), '.scan-cache');
 
 // Validated UUID v4 format — prevents path traversal via scan ID
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -21,7 +22,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 let storeDirReady = false;
 async function ensureStoreDir() {
   if (!storeDirReady) {
-    await mkdir(STORE_DIR, { recursive: true });
+    // mode 0o700: owner-only access — scan files contain garment analysis data
+    await mkdir(STORE_DIR, { recursive: true, mode: 0o700 });
     storeDirReady = true;
   }
 }
@@ -30,23 +32,23 @@ function scanFilePath(id: string) {
   return join(STORE_DIR, `${id}.json`);
 }
 
-let isPruning = false;
-function pruneExpired(now: number) {
-  if (isPruning) return;
-  isPruning = true;
-  try {
-    for (const [id, scan] of scans) {
-      if (now - scan.createdAt > SCAN_TTL_MS) {
-        scans.delete(id);
-        unlink(scanFilePath(id)).catch((err: NodeJS.ErrnoException) => {
-          if (err?.code !== 'ENOENT') {
-            log.warn('Failed to delete expired scan file', { id, err: err.message });
-          }
-        });
-      }
+// Collect expired IDs synchronously (Map mutation is single-threaded safe),
+// then fire-and-forget file deletions. No boolean flag needed — the Map
+// mutation itself is the critical section and Node's event loop serialises it.
+function pruneExpired(now: number): void {
+  const expired: string[] = [];
+  for (const [id, scan] of scans) {
+    if (now - scan.createdAt > SCAN_TTL_MS) {
+      scans.delete(id);
+      expired.push(id);
     }
-  } finally {
-    isPruning = false;
+  }
+  for (const id of expired) {
+    unlink(scanFilePath(id)).catch((err: NodeJS.ErrnoException) => {
+      if (err?.code !== 'ENOENT') {
+        log.warn('Failed to delete expired scan file', { id, err: err.message });
+      }
+    });
   }
 }
 
@@ -57,13 +59,14 @@ export async function saveScanResult(text: string, result: ScanResult): Promise<
 
   const id = result.id;
   const stored: StoredScan = { id, text, result, createdAt: now };
-  const serialized = JSON.stringify(stored, null, 2);
+  // Compact JSON — no pretty-printing; saves ~30% storage with no read-side impact
+  const serialized = JSON.stringify(stored);
 
-  if (serialized.length > MAX_RESULT_BYTES) {
+  if (serialized.length > MAX_SCAN_BYTES) {
     log.warn('Scan result exceeds size limit, skipping disk write', {
       id,
       bytes: serialized.length,
-      limit: MAX_RESULT_BYTES,
+      limit: MAX_SCAN_BYTES,
     });
     scans.set(id, stored);
     return id;
@@ -97,13 +100,23 @@ export async function getScanById(id: string): Promise<StoredScan | null> {
     const parsed = JSON.parse(raw) as StoredScan;
 
     if (now - parsed.createdAt > SCAN_TTL_MS) {
-      unlink(filePath).catch(() => {});
+      // Best-effort delete — log unexpected failures
+      unlink(filePath).catch((err: NodeJS.ErrnoException) => {
+        if (err?.code !== 'ENOENT') {
+          log.warn('Failed to delete expired scan file on read path', { id, err: err.message });
+        }
+      });
       return null;
     }
 
     scans.set(id, parsed);
     return parsed;
-  } catch {
+  } catch (err) {
+    // ENOENT is expected (cache miss) — everything else is a real problem
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code !== 'ENOENT') {
+      log.warn('Unexpected error reading scan file', { id, err: (err as Error).message });
+    }
     return null;
   }
 }

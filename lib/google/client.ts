@@ -76,11 +76,13 @@ export async function getGoogleCredentialsFromFile(
   return parseCredentials(contents);
 }
 
-// Cached GoogleAuth instance and token — avoids creating a new auth client on every request
-let authInstance: GoogleAuth | null = null;
+// Token cache + in-flight deduplication.
+// _tokenFetch ensures only one token request is in flight at a time — concurrent
+// callers await the same promise instead of each creating a new GoogleAuth instance.
+let _tokenFetch: Promise<string> | null = null;
 let tokenCache: { token: string; expiresAt: number } | null = null;
 
-export async function getGoogleAccessToken(scopes: string | string[]) {
+export async function getGoogleAccessToken(scopes: string | string[]): Promise<string> {
   const now = Date.now();
 
   // Return cached token if it has more than 60 seconds of life left
@@ -88,26 +90,27 @@ export async function getGoogleAccessToken(scopes: string | string[]) {
     return tokenCache.token;
   }
 
-  const credentials = getGoogleCredentials();
-
-  if (!authInstance) {
-    authInstance = new GoogleAuth({
-      credentials: {
-        type: 'service_account',
-        project_id: credentials.projectId,
-        client_email: credentials.clientEmail,
-        private_key: credentials.privateKey,
-      },
-      scopes,
+  // Deduplicate concurrent token fetches — only one in-flight at a time
+  if (!_tokenFetch) {
+    _tokenFetch = (async () => {
+      const credentials = getGoogleCredentials();
+      const auth = new GoogleAuth({
+        credentials: {
+          type: 'service_account',
+          project_id: credentials.projectId,
+          client_email: credentials.clientEmail,
+          private_key: credentials.privateKey,
+        },
+        scopes,
+      });
+      const token = await auth.getAccessToken();
+      if (!token) throw new Error('Failed to obtain Google access token.');
+      tokenCache = { token, expiresAt: Date.now() + 50 * 60 * 1000 };
+      return token;
+    })().finally(() => {
+      _tokenFetch = null;
     });
   }
 
-  const token = await authInstance.getAccessToken();
-  if (!token) {
-    throw new Error('Failed to obtain Google access token.');
-  }
-
-  // Tokens expire in 1 hour; cache for 50 minutes
-  tokenCache = { token, expiresAt: now + 50 * 60 * 1000 };
-  return token;
+  return _tokenFetch;
 }
