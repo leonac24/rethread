@@ -191,7 +191,7 @@ export default function ProfilePage() {
     : 100;
 
   return (
-    <main className="min-h-screen bg-bg py-8">
+    <main className="min-h-screen bg-bg pt-2 pb-8">
       <div className="content-width space-y-6">
 
         {/* ── Profile hero ── */}

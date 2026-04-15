@@ -59,7 +59,7 @@ export default function Home() {
               width={600}
               height={750}
               priority
-              className="w-[520px] h-auto rotate-6"
+              className="w-[360px] h-auto rotate-6"
             />
           </div>
         </div>
