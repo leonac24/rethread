@@ -10,6 +10,10 @@ const firebaseConfig = {
   appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+export function isFirebaseConfigured(): boolean {
+  return !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+}
+
 function getClientApp(): FirebaseApp {
   if (getApps().length) return getApps()[0]!;
   return initializeApp(firebaseConfig);

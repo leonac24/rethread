@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User } from 'firebase/auth';
-import { clientAuth } from '@/lib/firebase/client';
+import { clientAuth, isFirebaseConfigured } from '@/lib/firebase/client';
 
 type AuthUser = {
   uid: string;
@@ -73,6 +73,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    if (!isFirebaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const unsubscribe = onAuthStateChanged(clientAuth(), async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
