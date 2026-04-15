@@ -43,9 +43,26 @@ export type RouteOption = {
 
 export type OutcomeAction = 'throw_away' | 'repair' | 'list' | 'donate';
 
+export type LandfillImpact = {
+  summary: string;
+  microplastics: string;
+  methane: string;
+  dye_runoff: string;
+  breakdown_years: string;
+};
+
+export type FashionTransparencyIndex = {
+  score: number;   // 0–100
+  year: number;
+  brand: string;
+  url: string;
+};
+
 export type ScanResult = {
   id: string;
   garment: Garment;
   cost: EnvironmentalCost;
   routes: [RouteOption, RouteOption, RouteOption];
+  landfill_impact?: LandfillImpact;
+  fti?: FashionTransparencyIndex;
 };
