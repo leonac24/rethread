@@ -88,10 +88,6 @@ export async function getBrandContext(
     defaultProject,
   );
 
-  const token = await getGoogleAccessToken([
-    'https://www.googleapis.com/auth/bigquery.readonly',
-  ]);
-
   const query = `
     SELECT TO_JSON_STRING(t) AS row_json
     FROM \`${projectId}.${datasetId}.${tableId}\` AS t
@@ -100,6 +96,12 @@ export async function getBrandContext(
   `;
 
   const data = await withRetry(async () => {
+    // Token fetched inside the retry body — each attempt gets a fresh token
+    // so a 401 retry isn't stuck reusing the token that just expired.
+    const token = await getGoogleAccessToken([
+      'https://www.googleapis.com/auth/bigquery.readonly',
+    ]);
+
     const response = await fetch(
       `https://bigquery.googleapis.com/bigquery/v2/projects/${projectId}/queries`,
       {

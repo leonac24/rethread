@@ -1,4 +1,4 @@
-import type { EnvironmentalCost, Garment, LandfillImpact } from '@/types/garment';
+import type { EnvironmentalCost, Garment, GarmentCondition, LandfillImpact } from '@/types/garment';
 import { log } from '@/lib/logger';
 import { GEMINI_TIMEOUT_MS } from '@/lib/config';
 import { withRetry, HttpError } from '@/lib/retry';
@@ -39,7 +39,10 @@ function sanitizeResponseText(s: string, maxLen = 200): string {
 
 function buildPrompt(garment: Garment, brandContext?: string) {
   const safeGarment = {
-    fibers: garment.fibers,
+    fibers: garment.fibers.map((f) => ({
+      material: sanitizeForPrompt(f.material),
+      percentage: f.percentage,
+    })),
     origin: sanitizeForPrompt(garment.origin ?? undefined),
     category: sanitizeForPrompt(garment.category ?? undefined),
     brand: sanitizeForPrompt(garment.brand),
@@ -66,9 +69,15 @@ function buildPrompt(garment: Garment, brandContext?: string) {
     '- Weak wastewater controls in origin country increase risk',
     '- High brand transparency score (>60) may indicate better dye practices',
     '',
-    'If a color is present, identify the most likely dye family',
-    '(e.g. "synthetic reactive dye", "vat dye", "acid dye", "natural indigo", "disperse dye")',
-    'and include dye_type and dye_reasoning. Omit both if no color is present.',
+    'If a color is present in the garment data, identify the most likely dye family used to achieve it',
+    '(e.g. "synthetic reactive dye", "vat dye", "acid dye", "natural indigo", "disperse dye") and',
+    'include reasoning about its environmental impact in dye_type and dye_reasoning.',
+    'If no color is present, omit dye_type and dye_reasoning.',
+    '',
+    'Also estimate the environmental impact if this garment is discarded:',
+    '- disposal_co2_kg: CO2 released via landfill decomposition or incineration (number)',
+    '- disposal_landfill_years: estimated years to decompose in landfill (integer)',
+    '- disposal_note: one sentence summarising disposal impact, max 40 words',
     '',
     'Set confidence based on how much information is available:',
     '- high: fiber blend + color + origin all known',
@@ -83,6 +92,9 @@ type DyeAnalysis = {
   reasoning: string;
   dye_type?: string;
   dye_reasoning?: string;
+  disposal_co2_kg: number;
+  disposal_landfill_years: number;
+  disposal_note: string;
 };
 
 function normalizeDyeAnalysis(value: unknown): DyeAnalysis {
@@ -97,7 +109,10 @@ function normalizeDyeAnalysis(value: unknown): DyeAnalysis {
     typeof candidate.dye_pollution_score !== 'number' ||
     typeof candidate.reasoning !== 'string' ||
     !confidence ||
-    !['high', 'medium', 'low'].includes(confidence)
+    !['high', 'medium', 'low'].includes(confidence) ||
+    typeof candidate.disposal_co2_kg !== 'number' ||
+    typeof candidate.disposal_landfill_years !== 'number' ||
+    typeof candidate.disposal_note !== 'string'
   ) {
     throw new Error('Gemini response does not match dye analysis schema.');
   }
@@ -108,6 +123,9 @@ function normalizeDyeAnalysis(value: unknown): DyeAnalysis {
     reasoning: sanitizeResponseText(candidate.reasoning.trim(), 600),
     ...(candidate.dye_type ? { dye_type: sanitizeResponseText(candidate.dye_type.trim(), 100) } : {}),
     ...(candidate.dye_reasoning ? { dye_reasoning: sanitizeResponseText(candidate.dye_reasoning.trim(), 600) } : {}),
+    disposal_co2_kg: Math.max(0, Number(candidate.disposal_co2_kg.toFixed(2))),
+    disposal_landfill_years: Math.max(0, Math.round(candidate.disposal_landfill_years)),
+    disposal_note: sanitizeResponseText(candidate.disposal_note.trim(), 200),
   };
 }
 
@@ -158,11 +176,14 @@ export async function computeCost(
           responseMimeType: 'application/json',
           responseSchema: {
             type: 'OBJECT',
-            required: ['dye_pollution_score', 'confidence', 'reasoning'],
+            required: ['dye_pollution_score', 'confidence', 'reasoning', 'disposal_co2_kg', 'disposal_landfill_years', 'disposal_note'],
             properties: {
               dye_pollution_score: { type: 'NUMBER' },
               confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
               reasoning: { type: 'STRING' },
+              disposal_co2_kg: { type: 'NUMBER' },
+              disposal_landfill_years: { type: 'NUMBER' },
+              disposal_note: { type: 'STRING' },
               ...(hasDyeFields
                 ? {
                     dye_type: { type: 'STRING' },
@@ -204,6 +225,7 @@ export async function computeCost(
 export type GarmentImageAnalysis = {
   category: string | null;
   color: string | null;
+  condition: GarmentCondition | null;
 };
 
 export async function computeLandfillImpact(garment: Garment): Promise<LandfillImpact> {
@@ -435,44 +457,48 @@ export async function analyzeGarmentImage(
     'Analyze this clothing item image.',
     'Identify the garment category (e.g. "shirt", "pants", "dress", "jacket", "shoes", "shorts", "skirt", "sweater", "coat").',
     'Identify the dominant color as a descriptive name (e.g. "navy blue", "burgundy", "off-white", "forest green").',
+    'Assess the visible wear condition: "poor" (significant damage, stains, or tears), "fair" (minor wear or fading), "good" (lightly used), "excellent" (like new).',
     'Return only valid JSON matching the schema.',
   ].join(' ');
 
-  const response = await fetch(GEMINI_ENDPOINT, {
-    method: 'POST',
-    signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-    headers: geminiHeaders(apiKey),
-    body: JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { inlineData: { mimeType, data: base64Image } },
-            { text: prompt },
-          ],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          required: ['category', 'color'],
-          properties: {
-            category: { type: 'STRING' },
-            color: { type: 'STRING' },
+  const data = await withRetry(async () => {
+    const response = await fetch(GEMINI_ENDPOINT, {
+      method: 'POST',
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+      headers: geminiHeaders(apiKey),
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inlineData: { mimeType, data: base64Image } },
+              { text: prompt },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            required: ['category', 'color', 'condition'],
+            properties: {
+              category: { type: 'STRING' },
+              color: { type: 'STRING' },
+              condition: { type: 'STRING', enum: ['poor', 'fair', 'good', 'excellent'] },
+            },
           },
         },
-      },
-    }),
-  });
+      }),
+    });
 
-  if (!response.ok) {
-    const text = await response.text();
-    log.error('Gemini image analysis failed', undefined, { stage: 'ingest', status: response.status });
-    throw new Error(`Gemini image analysis failed (${response.status}): ${text}`);
-  }
+    if (!response.ok) {
+      const text = await response.text();
+      log.error('Gemini image analysis failed', undefined, { stage: 'ingest', status: response.status });
+      throw new HttpError(response.status, `Gemini image analysis failed (${response.status}): ${text}`);
+    }
 
-  const data = (await response.json()) as GeminiResponse;
+    return response.json() as Promise<GeminiResponse>;
+  }, { retries: 3, label: 'Gemini-image' });
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!rawText) throw new Error('Gemini returned no content for image analysis.');
 
@@ -487,9 +513,14 @@ export async function analyzeGarmentImage(
     throw new Error('Gemini image analysis response is not an object.');
   }
 
+  const VALID_CONDITIONS = new Set<string>(['poor', 'fair', 'good', 'excellent']);
   const result = parsed as Record<string, unknown>;
   return {
     category: typeof result.category === 'string' && result.category ? result.category : null,
     color: typeof result.color === 'string' && result.color ? result.color : null,
+    condition:
+      typeof result.condition === 'string' && VALID_CONDITIONS.has(result.condition)
+        ? (result.condition as GarmentCondition)
+        : null,
   };
 }

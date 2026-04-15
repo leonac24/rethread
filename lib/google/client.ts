@@ -12,11 +12,12 @@ type GoogleCredentials = {
 };
 
 function parseCredentials(json: string): GoogleCredentials {
-  const parsed = JSON.parse(json) as {
-    project_id?: string;
-    client_email?: string;
-    private_key?: string;
-  };
+  let parsed: { project_id?: string; client_email?: string; private_key?: string };
+  try {
+    parsed = JSON.parse(json) as typeof parsed;
+  } catch {
+    throw new Error('Google credentials JSON is not valid JSON. Check the environment variable.');
+  }
 
   if (!parsed.client_email || !parsed.private_key) {
     throw new Error(

@@ -1,4 +1,4 @@
-import type { ScanResult } from '@/types/garment';
+import type { OutcomeAction, ScanResult } from '@/types/garment';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -10,6 +10,8 @@ type StoredScan = {
   text: string;
   result: ScanResult;
   createdAt: number;
+  outcome?: OutcomeAction;  // set once, immutable after first write
+  outcomeAt?: number;
 };
 
 const scans = new Map<string, StoredScan>();
@@ -97,9 +99,23 @@ export async function getScanById(id: string): Promise<StoredScan | null> {
   const filePath = scanFilePath(id);
   try {
     const raw = await readFile(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as StoredScan;
+    const parsed = JSON.parse(raw);
 
-    if (now - parsed.createdAt > SCAN_TTL_MS) {
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      typeof parsed.id !== 'string' ||
+      typeof parsed.createdAt !== 'number' ||
+      !parsed.result
+    ) {
+      log.warn('Corrupt or malformed scan file on disk, discarding', { id });
+      unlink(filePath).catch(() => {});
+      return null;
+    }
+
+    const typedParsed = parsed as StoredScan;
+
+    if (now - typedParsed.createdAt > SCAN_TTL_MS) {
       // Best-effort delete — log unexpected failures
       unlink(filePath).catch((err: NodeJS.ErrnoException) => {
         if (err?.code !== 'ENOENT') {
@@ -109,8 +125,8 @@ export async function getScanById(id: string): Promise<StoredScan | null> {
       return null;
     }
 
-    scans.set(id, parsed);
-    return parsed;
+    scans.set(id, typedParsed);
+    return typedParsed;
   } catch (err) {
     // ENOENT is expected (cache miss) — everything else is a real problem
     const code = (err as NodeJS.ErrnoException)?.code;
@@ -119,4 +135,25 @@ export async function getScanById(id: string): Promise<StoredScan | null> {
     }
     return null;
   }
+}
+
+export async function recordOutcome(
+  id: string,
+  action: OutcomeAction,
+): Promise<{ conflict: boolean; stored: StoredScan | null }> {
+  if (!UUID_RE.test(id)) throw new Error('Invalid scan ID format');
+
+  const scan = await getScanById(id);
+  if (!scan) return { conflict: false, stored: null };
+  if (scan.outcome) return { conflict: true, stored: scan };
+
+  const updated: StoredScan = { ...scan, outcome: action, outcomeAt: Date.now() };
+  scans.set(id, updated);
+
+  // Best-effort disk write — outcome loss on restart is acceptable (ephemeral store)
+  writeFile(scanFilePath(id), JSON.stringify(updated), 'utf8').catch((err) => {
+    log.warn('Failed to persist outcome to disk', { id, err: (err as Error).message });
+  });
+
+  return { conflict: false, stored: updated };
 }

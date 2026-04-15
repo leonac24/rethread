@@ -1,47 +1,14 @@
 import { analyzeGarmentImage, computeCost, computeLandfillImpact, parseLabelWithGemini } from '@/lib/google/gemini';
+import { getBrandContext } from '@/lib/google/bigquery';
 import { getFashionTransparencyScore } from '@/lib/wikirate';
 import { findRoutes } from '@/lib/google/places';
 import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/vision';
 import { saveScanResult } from '@/lib/scan-store';
 import { createRequestLogger } from '@/lib/logger';
-import { RATE_LIMIT, RATE_WINDOW_MS, MAX_TRACKED_IPS, MAX_UPLOAD_FILES, MAX_FILE_BYTES } from '@/lib/config';
+import { MAX_UPLOAD_FILES, MAX_FILE_BYTES } from '@/lib/config';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { RouteOption, ScanResult } from '@/types/garment';
-
-// ─── Rate limiting ────────────────────────────────────────────────────────────
-// ipHits is capped and auto-evicts entries after their window expires
-// to prevent unbounded memory growth.
-
-const ipHits = new Map<string, { count: number; resetAt: number }>();
-
-function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-
-  // Evict all expired entries if the Map is at capacity
-  if (ipHits.size >= MAX_TRACKED_IPS) {
-    for (const [key, entry] of ipHits) {
-      if (now > entry.resetAt) ipHits.delete(key);
-    }
-  }
-
-  const entry = ipHits.get(ip);
-  if (!entry || now > entry.resetAt) {
-    const resetAt = now + RATE_WINDOW_MS;
-    ipHits.set(ip, { count: 1, resetAt });
-    // Auto-evict this entry once the window expires
-    setTimeout(() => {
-      const current = ipHits.get(ip);
-      if (current?.resetAt === resetAt) ipHits.delete(ip);
-    }, RATE_WINDOW_MS);
-    return { allowed: true };
-  }
-
-  if (entry.count >= RATE_LIMIT) {
-    return { allowed: false, retryAfter: Math.ceil((entry.resetAt - now) / 1000) };
-  }
-
-  entry.count++;
-  return { allowed: true };
-}
+import { prioritizeRoutesByCondition } from '@/lib/route-utils';
 
 // ─── File validation ──────────────────────────────────────────────────────────
 // Validate image by magic bytes — file.type is user-controlled and can be forged
@@ -85,11 +52,7 @@ export async function POST(request: Request) {
   const traceId = crypto.randomUUID();
   const reqLog = createRequestLogger(traceId);
 
-  // Prefer X-Real-IP (set by reverse proxy, not spoofable by client) over X-Forwarded-For
-  const ip =
-    request.headers.get('x-real-ip') ??
-    request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() ??
-    'unknown';
+  const ip = getClientIp(request);
 
   const { allowed, retryAfter } = checkRateLimit(ip);
   if (!allowed) {
@@ -159,9 +122,13 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
       return Response.json({ error: 'The garment photo exceeds the 10 MB size limit.' }, { status: 400, headers: { 'X-Trace-Id': traceId } });
     }
     const buf = Buffer.from(await garmentPhotoFile.arrayBuffer());
-    if (isImageMagicBytes(buf)) {
-      garmentPhotoBuffer = buf;
+    if (!isImageMagicBytes(buf)) {
+      return Response.json(
+        { error: 'The garment photo is not a valid image.' },
+        { status: 400, headers: { 'X-Trace-Id': traceId } },
+      );
     }
+    garmentPhotoBuffer = buf;
   }
 
   reqLog.info('Starting scan pipeline', { stage: 'ingest', labelCount: labelBuffers.length, hasGarmentPhoto: !!garmentPhotoBuffer });
@@ -209,6 +176,7 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     category: parsed.category ?? imageAnalysis?.category ?? null,
     ...(parsed.brand ? { brand: parsed.brand } : {}),
     ...(imageAnalysis?.color ? { color: imageAnalysis.color } : {}),
+    ...(imageAnalysis?.condition ? { condition: imageAnalysis.condition } : {}),
   };
 
   reqLog.info('Ingest complete', { stage: 'ingest', brand: garment.brand ?? null, category: garment.category });
@@ -238,22 +206,31 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     reqLog.warn('No coords on request — using fallback routes', { stage: 'route' });
   }
 
-  // Fire all external lookups and both Gemini calls in parallel — nothing gates anything else
+  // Fire all external lookups in parallel — FTI and brand context don't gate each other
   const ftiPromise = getFashionTransparencyScore(garment.brand ?? '').catch((err) => {
     reqLog.warn('WikiRate FTI lookup failed', { stage: 'cost', err: String(err) });
     return null;
   });
 
-  const costPromise = computeCost(garment).catch((err) => {
-    reqLog.error('Gemini cost estimation failed, returning fallback', err, { stage: 'cost' });
-    return {
-      water_liters: 0,
-      co2_kg: 0,
-      dye_pollution_score: 1,
-      confidence: 'low' as const,
-      reasoning: 'Cost estimation unavailable. Showing fallback values.',
-    };
-  });
+  const costPromise: Promise<ScanResult['cost']> = getBrandContext(garment.brand ?? '')
+    .catch((err) => {
+      reqLog.warn('BigQuery brand context failed, proceeding without it', { stage: 'cost', err: err instanceof Error ? err.message : String(err) });
+      return null;
+    })
+    .then((brandContext) => computeCost(garment, brandContext ?? undefined))
+    .catch((err) => {
+      reqLog.error('Gemini cost estimation failed, returning fallback', err, { stage: 'cost' });
+      return {
+        water_liters: 0,
+        co2_kg: 0,
+        dye_pollution_score: 1,
+        confidence: 'low' as const,
+        reasoning: 'Cost estimation unavailable. Showing fallback values.',
+        disposal_co2_kg: 0,
+        disposal_landfill_years: 0,
+        disposal_note: 'Disposal impact unavailable.',
+      };
+    });
 
   const landfillPromise = computeLandfillImpact(garment).catch((err) => {
     reqLog.warn('Landfill impact failed', { stage: 'cost', err: String(err) });
@@ -266,7 +243,7 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     id: crypto.randomUUID(),
     garment,
     cost,
-    routes,
+    routes: prioritizeRoutesByCondition(routes, garment.condition),
     ...(landfill_impact ? { landfill_impact } : {}),
     ...(fti ? { fti } : {}),
   };

@@ -6,10 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
   },
   "dependencies": {
     "@google-cloud/vision": "^5.3.5",
+    "firebase-admin": "^13.8.0",
     "google-auth-library": "^10.6.2",
     "next": "^15.0.0",
     "react": "^19.0.0",
