@@ -6,7 +6,8 @@ import { saveScanResult } from '@/lib/scan-store';
 import { createRequestLogger } from '@/lib/logger';
 import { MAX_UPLOAD_FILES, MAX_FILE_BYTES } from '@/lib/config';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import type { GarmentCondition, RouteOption, ScanResult } from '@/types/garment';
+import type { RouteOption, ScanResult } from '@/types/garment';
+import { prioritizeRoutesByCondition } from '@/lib/route-utils';
 
 // ─── File validation ──────────────────────────────────────────────────────────
 // Validate image by magic bytes — file.type is user-controlled and can be forged
@@ -40,25 +41,6 @@ function fallbackRoutes(): [RouteOption, RouteOption, RouteOption] {
     { kind: 'resale', name: 'No resale route available', address: 'Location not provided', distance_km: 0, accepts_item: null },
     { kind: 'donation', name: 'No donation route available', address: 'Location not provided', distance_km: 0, accepts_item: null },
   ];
-}
-
-// ─── Route prioritization ─────────────────────────────────────────────────────
-// Reorders routes so the most relevant option surfaces first based on garment condition.
-// Pure function — no side effects, easy to unit test.
-
-function prioritizeRoutesByCondition(
-  routes: [RouteOption, RouteOption, RouteOption],
-  condition: GarmentCondition | null | undefined,
-): [RouteOption, RouteOption, RouteOption] {
-  if (!condition) return routes;
-  const sorted = [...routes] as [RouteOption, RouteOption, RouteOption];
-  const targetKind = condition === 'poor' || condition === 'fair' ? 'repair' : 'resale';
-  const idx = sorted.findIndex((r) => r.kind === targetKind);
-  if (idx > 0) {
-    const [target] = sorted.splice(idx, 1);
-    sorted.unshift(target);
-  }
-  return sorted as [RouteOption, RouteOption, RouteOption];
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────

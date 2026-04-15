@@ -65,7 +65,9 @@ export async function POST(
     const outcomeRef = db().collection('outcomes').doc();
     const userRef = db().collection('users').doc(user.uid);
 
-    // Atomic batch — both writes succeed or both fail
+    // Atomic batch — both writes succeed or both fail.
+    // Use set+merge on userRef (not update) so the write succeeds even if the
+    // user doc doesn't exist yet (e.g. auth/callback was never called).
     const batch = db().batch();
     batch.set(outcomeRef, {
       userId: user.uid,
@@ -75,13 +77,28 @@ export async function POST(
       waterLiters,
       createdAt: FieldValue.serverTimestamp(),
     });
-    batch.update(userRef, {
-      totalCO2SavedKg: FieldValue.increment(co2Kg),
-      totalWaterSavedLiters: FieldValue.increment(waterLiters),
-      actionCount: FieldValue.increment(1),
-    });
+    batch.set(
+      userRef,
+      {
+        totalCO2SavedKg: FieldValue.increment(co2Kg),
+        totalWaterSavedLiters: FieldValue.increment(waterLiters),
+        actionCount: FieldValue.increment(1),
+      },
+      { merge: true },
+    );
 
-    await batch.commit();
+    // Degrade gracefully — Firestore failure must not fail the outcome response.
+    // The outcome is already recorded in the scan store; the user just won't get
+    // environmental credit for this action (logged for ops visibility).
+    try {
+      await batch.commit();
+    } catch (err) {
+      console.error('[outcome] Firestore batch failed, totals not credited', {
+        uid: user.uid,
+        scanId: id,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   return Response.json({ id, outcome: stored.outcome }, { status: 200 });
