@@ -14,6 +14,7 @@
     "@google-cloud/vision": "^5.3.5",
     "firebase-admin": "^13.8.0",
     "google-auth-library": "^10.6.2",
+    "motion": "^12.38.0",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

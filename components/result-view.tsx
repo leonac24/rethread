@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
 import {
   PieChart,
   Pie,
@@ -340,6 +341,12 @@ export function ResultView({ id }: ResultViewProps) {
 
             {/* ── Fiber Composition ───────────────────────────────── */}
             {fiberData.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+              >
               <Card style={{ backgroundImage: 'url(/images/burlap.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: 'none', backgroundColor: 'transparent' }}>
                 <SectionLabel><span className="text-ink bg-white px-1">Fiber Composition</span></SectionLabel>
 
@@ -421,6 +428,7 @@ export function ResultView({ id }: ResultViewProps) {
                   ))}
                 </div>
               </Card>
+              </motion.div>
             )}
             </div>
 
@@ -430,9 +438,12 @@ export function ResultView({ id }: ResultViewProps) {
 
               {/* Water + CO2 ripped paper cards */}
               <div className="grid grid-cols-2 gap-[34px] mb-1 md:mb-4">
-                <div
+                <motion.div
                   className="text-center md:p-6 md:bg-[url(/images/tape.png)] md:bg-cover md:bg-center"
-                  style={{ transform: 'rotate(-1.5deg)' }}
+                  initial={{ opacity: 0, y: -24, rotate: -14 }}
+                  whileInView={{ opacity: 1, y: 0, rotate: -1.5 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ type: 'spring', stiffness: 180, damping: 14, delay: 0.05 }}
                 >
                   <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.png)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
                     <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
@@ -444,10 +455,13 @@ export function ResultView({ id }: ResultViewProps) {
                   <p className="text-[9px] text-ink-muted mt-2 pb-4 md:pb-0 leading-tight">
                     est. based on <a href="https://waterfootprint.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">WaterFootprint.org</a><br/>per-fiber LCA data
                   </p>
-                </div>
-                <div
+                </motion.div>
+                <motion.div
                   className="text-center md:p-6 md:bg-[url(/images/tape.png)] md:bg-cover md:bg-center"
-                  style={{ transform: 'rotate(1.2deg)' }}
+                  initial={{ opacity: 0, y: -24, rotate: 14 }}
+                  whileInView={{ opacity: 1, y: 0, rotate: 1.2 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ type: 'spring', stiffness: 180, damping: 14, delay: 0.18 }}
                 >
                   <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.png)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
                     <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
@@ -459,7 +473,7 @@ export function ResultView({ id }: ResultViewProps) {
                   <p className="text-[9px] text-ink-muted mt-2 pb-4 md:pb-0 leading-tight">
                     est. based on <a href="https://textileexchange.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">Textile Exchange</a><br/>per-fiber LCA data
                   </p>
-                </div>
+                </motion.div>
               </div>
 
               {/* Dye risk bar — crumpled-paper fill tinted by dye color */}
@@ -469,10 +483,13 @@ export function ResultView({ id }: ResultViewProps) {
                   <span className="text-[15px] font-bold" style={{ color: dyeColor }}>{dyeScore}/10</span>
                 </div>
                 <div className="relative w-full h-[28px] bg-ink/[0.07] rounded-md">
-                  <div
+                  <motion.div
                     className="absolute top-[-5px] bottom-[-5px] left-0"
+                    initial={{ width: '0%' }}
+                    whileInView={{ width: `${Math.max(0, Math.min(10, dyeScore)) * 10}%` }}
+                    viewport={{ once: true, amount: 0.5 }}
+                    transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
                     style={{
-                      width: `${Math.max(0, Math.min(10, dyeScore)) * 10}%`,
                       backgroundColor: dyeColor,
                       backgroundImage: 'url(/images/paperbar.webp)',
                       backgroundSize: '520px',
@@ -510,14 +527,18 @@ export function ResultView({ id }: ResultViewProps) {
                   <SectionLabel>What happens if you throw it in the trash</SectionLabel>
                   <p className="text-[15px] leading-[20px] text-ink mb-4">{li.summary}</p>
                   <div className="grid grid-cols-1 gap-2">
-                    {items.map((item) => (
-                      <div
+                    {items.map((item, i) => (
+                      <motion.div
                         key={item.key}
                         className="px-5 py-[15px] md:py-3 bg-[url(/images/ribbon.png)] bg-[length:auto_137.5%] bg-no-repeat bg-center md:bg-cover"
+                        initial={{ opacity: 0, x: -28 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true, amount: 0.3 }}
+                        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.05 + i * 0.09 }}
                       >
                         <p className="text-[14px] font-bold uppercase tracking-[0.08em] text-ink mb-0.5">{item.label}</p>
                         <p className="text-[14px] leading-[18px] text-ink">{item.body}</p>
-                      </div>
+                      </motion.div>
                     ))}
                   </div>
                 </Card>
