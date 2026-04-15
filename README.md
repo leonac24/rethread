@@ -212,6 +212,7 @@ GOOGLE_APPLICATION_CREDENTIALS_BASE64=$(base64 -i service-account.json)
 
 ## Design notes
 
+- **Content width standard** — every page's main content column uses the `.content-width` utility defined in `app/globals.css` (`width: 80%`, centered, identical on mobile and desktop). Do not introduce ad-hoc `max-w-*` wrappers on top-level page containers; always wrap the page body in a `content-width` div so horizontal margins stay consistent across Landing, Scan, Result, and Profile.
 - **Parallel pipeline** — cost estimation, landfill impact, WikiRate FTI, and route finding all fire at the same time after ingest. No stage blocks another.
 - **Lookup table, not AI, for water/CO₂** — `fiber-impact.ts` uses verified LCA data from WaterFootprint.org and Textile Exchange. Gemini only handles dye scoring and reasoning, which has no clean tabular source.
 - **Direct WikiRate card endpoint** — the generic `answers.json` endpoint ignores `company_name` filters and returns arbitrary results. The direct `+{Company}+{year}.json` card endpoint is reliable.

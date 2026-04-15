@@ -55,7 +55,7 @@ function ScoreDot({ score }: { score: number }) {
 
 function ClosetItem({ label, fiber, score, date, img }: (typeof MOCK_SCANS)[number]) {
   return (
-    <div className="flex flex-col items-center" style={{ minWidth: 210 }}>
+    <div className="flex flex-col items-center w-full">
       {/* hanger on top */}
       <Image
         src="/images/hanger.png"
@@ -94,6 +94,91 @@ function ClosetItem({ label, fiber, score, date, img }: (typeof MOCK_SCANS)[numb
   );
 }
 
+function AddClosetTile() {
+  return (
+    <Link
+      href="/scan"
+      className="flex flex-col items-center w-full group"
+      aria-label="Add to Closet"
+    >
+      {/* hanger on top — matches ClosetItem structure exactly */}
+      <Image
+        src="/images/hanger.png"
+        alt=""
+        width={140}
+        height={80}
+        className="w-[135px] h-auto object-contain relative z-10 mb-[-27px] opacity-60"
+      />
+
+      {/* card area — dashed "empty slot" with + and label */}
+      <div
+        className="relative w-full rounded-xl overflow-hidden bg-ink/5 border-2 border-dashed border-rule transition-colors group-hover:bg-ink/10"
+        style={{ paddingTop: '110%' }}
+      >
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <span className="text-[52px] leading-none font-light text-ink-muted">+</span>
+          <span className="text-[12px] font-bold tracking-[0.08em] uppercase text-ink-muted">
+            Add to Closet
+          </span>
+        </div>
+      </div>
+
+      {/* invisible metadata placeholder so total tile height matches ClosetItem */}
+      <div className="mt-2 w-full text-center px-1 invisible" aria-hidden>
+        <p className="text-[13px] font-bold leading-tight">&nbsp;</p>
+        <p className="text-[11px] mt-0.5 leading-tight">
+          &nbsp;
+          <br />
+          &nbsp;
+        </p>
+        <p className="text-[11px] mt-1">&nbsp;</p>
+        <p className="text-[10px] mt-0.5">&nbsp;</p>
+      </div>
+    </Link>
+  );
+}
+
+function RankBadge({
+  currentTier,
+  nextTier,
+  scanCount,
+  progressToNext,
+}: {
+  currentTier: (typeof TIERS)[number];
+  nextTier: (typeof TIERS)[number] | null;
+  scanCount: number;
+  progressToNext: number;
+}) {
+  return (
+    <div className="relative w-full max-w-[170px] md:max-w-[227px]">
+      <Image
+        src="/images/rankingframe.png"
+        alt="Ranking frame"
+        width={680}
+        height={340}
+        className="w-full h-auto"
+      />
+      <div className="absolute inset-0 flex flex-col items-center justify-center pb-[6%]">
+        <p className="text-[8px] md:text-[10px] font-bold tracking-[0.18em] uppercase text-ink-muted">Current Tier</p>
+        <p className="text-[15px] md:text-[22px] font-black text-ink leading-tight mt-0.5">{currentTier.name}</p>
+        {nextTier && (
+          <>
+            <div className="mt-1.5 md:mt-2 w-[55%] h-1 md:h-1.5 rounded-full bg-black/10">
+              <div
+                className="h-full rounded-full bg-accent-700"
+                style={{ width: `${progressToNext}%` }}
+              />
+            </div>
+            <p className="mt-1 text-[8px] md:text-[10px] text-ink-muted font-medium">
+              {scanCount} / {nextTier.min} → {nextTier.name}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const scanCount = 12;
   const currentTier = getTier(scanCount);
@@ -103,54 +188,38 @@ export default function ProfilePage() {
     : 100;
 
   return (
-    <main className="min-h-screen bg-bg py-8 px-4">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <main className="min-h-screen bg-bg py-8">
+      <div className="content-width space-y-6">
 
         {/* ── Profile hero ── */}
-        <div className="relative flex flex-col items-center pt-4">
-          {/* pfp */}
-          <div className="w-[120px] h-[120px] rounded-full overflow-hidden">
-            <Image
-              src="/images/pfphead.jpg"
-              alt="Profile photo"
-              width={200}
-              height={200}
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          <h1 className="mt-3 text-[22px] font-bold text-ink">Leona Chen</h1>
-          <p className="text-[13px] text-ink-muted mt-0.5">@leonac · Member since Apr 2025</p>
-        </div>
-
-        {/* ── Rank card with rankingframe ── */}
-        <div className="flex justify-center">
-          <div className="relative w-full max-w-[227px]">
-            <Image
-              src="/images/rankingframe.png"
-              alt="Ranking frame"
-              width={680}
-              height={340}
-              className="w-full h-auto"
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center pb-[6%]">
-              <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-ink-muted">Current Tier</p>
-              <p className="text-[22px] font-black text-ink leading-tight mt-0.5">{currentTier.name}</p>
-              {nextTier && (
-                <>
-                  <div className="mt-2 w-[55%] h-1.5 rounded-full bg-black/10">
-                    <div
-                      className="h-full rounded-full bg-accent-700"
-                      style={{ width: `${progressToNext}%` }}
-                    />
-                  </div>
-                  <p className="mt-1 text-[10px] text-ink-muted font-medium">
-                    {scanCount} / {nextTier.min} scans → {nextTier.name}
-                  </p>
-                </>
-              )}
+        <div className="pt-4">
+          {/* Row: pfp left, badge right — centered on mobile, pushed to edges on desktop */}
+          <div className="flex flex-row items-center justify-center md:justify-between gap-5 md:gap-0">
+            <div className="flex flex-col items-center shrink-0">
+              <div className="w-[90px] h-[90px] md:w-[120px] md:h-[120px] rounded-full overflow-hidden">
+                <Image
+                  src="/images/pfphead.jpg"
+                  alt="Profile photo"
+                  width={200}
+                  height={200}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <h1 className="mt-2 md:mt-3 text-[16px] md:text-[22px] font-bold text-ink">@leonac</h1>
             </div>
+
+            <RankBadge
+              currentTier={currentTier}
+              nextTier={nextTier}
+              scanCount={scanCount}
+              progressToNext={progressToNext}
+            />
           </div>
+
+          {/* Bio spans full content width below the hero row */}
+          <p className="mt-5 mx-auto max-w-[420px] text-center text-[13px] md:text-[14px] text-ink-muted leading-snug">
+            Rethreading my wardrobe one garment at a time. Natural fibers, thrift finds, and slow-fashion obsessed.
+          </p>
         </div>
 
         {/* ── Stats grid ── */}
@@ -176,27 +245,12 @@ export default function ProfilePage() {
         {/* ── My Closet ── */}
         <div>
           <h2 className="text-[13px] font-bold tracking-[0.12em] uppercase text-ink-muted mb-4">My Closet</h2>
-          {/* horizontal scroll row */}
-          <div
-            className="flex gap-4 overflow-x-auto pb-2"
-            style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
-          >
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-6 pb-8">
+            <AddClosetTile />
             {MOCK_SCANS.map((scan) => (
-              <div key={scan.id} style={{ scrollSnapAlign: 'start', minWidth: 210, width: 210 }}>
-                <ClosetItem {...scan} />
-              </div>
+              <ClosetItem key={scan.id} {...scan} />
             ))}
           </div>
-        </div>
-
-        {/* ── Scan CTA ── */}
-        <div className="pb-8 flex justify-center">
-          <Link
-            href="/scan"
-            className="inline-flex items-center justify-center h-11 px-8 rounded-md bg-ink text-bg text-[14px] font-medium transition-opacity hover:opacity-80"
-          >
-            + New scan
-          </Link>
         </div>
 
       </div>
