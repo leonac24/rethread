@@ -244,8 +244,9 @@ export async function computeLandfillImpact(garment: Garment): Promise<LandfillI
     '2. methane — decomposition timeline and methane/greenhouse gas output from organic fibers',
     '3. dye_runoff — toxic dye and chemical runoff from this specific fiber blend and likely dye types into soil and water',
     '4. breakdown_years — realistic range of years for this specific fiber blend to break down in landfill',
-    'Also write a one-sentence summary of the overall landfill impact.',
-    'Be specific to the fiber blend. Keep each field under 40 words. breakdown_years should be a short string like "200–500 years" or "20–30 years".',
+    'Also write a one-sentence summary of the overall landfill impact (under 40 words).',
+    'STRICT: microplastics, methane, dye_runoff, and breakdown_years must each be under 100 characters. Write complete short sentences — do not exceed the limit.',
+    'Be specific to the fiber blend. breakdown_years should be a short string like "200–500 years" or "20–30 years".',
     'Return only valid JSON matching the schema.',
   ].join(' ');
 

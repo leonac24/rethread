@@ -17,6 +17,11 @@ function truncate(text: string, maxWords: number): string {
   return words.slice(0, maxWords).join(' ') + '...';
 }
 
+function truncateChars(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars - 1).trimEnd() + '…';
+}
+
 function mapsUrl(route: RouteOption): string {
   const query = encodeURIComponent(route.name + ', ' + route.address);
   return `https://www.google.com/maps/search/?api=1&query=${query}`;
@@ -177,7 +182,7 @@ export function ResultView({ id }: ResultViewProps) {
   const fiberData = data?.result.garment.fibers.map((f) => ({ name: f.material, value: f.percentage })) ?? [];
 
   return (
-    <main className="min-h-screen bg-bg md:pt-[80px]">
+    <main className="min-h-screen bg-bg">
       {/* Shared torn-edge filter — used by fiber donut and dye bar */}
       <svg width="0" height="0" aria-hidden className="absolute">
         <defs>
@@ -424,30 +429,34 @@ export function ResultView({ id }: ResultViewProps) {
               <SectionLabel>Environmental Impact</SectionLabel>
 
               {/* Water + CO2 ripped paper cards */}
-              <div className="grid grid-cols-2 gap-[34px] mb-4">
+              <div className="grid grid-cols-2 gap-[34px] mb-1 md:mb-4">
                 <div
-                  className="p-6 text-center"
-                  style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(-1.5deg)' }}
+                  className="text-center md:p-6 md:bg-[url(/images/tape.png)] md:bg-cover md:bg-center"
+                  style={{ transform: 'rotate(-1.5deg)' }}
                 >
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
-                  <p className="text-[26px] font-bold text-ink leading-none">
-                    {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
-                  </p>
-                  <p className="text-[10px] text-ink font-medium mt-1">gallons</p>
-                  <p className="text-[9px] text-ink-muted mt-2 leading-tight">
+                  <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.png)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
+                    <p className="text-[26px] font-bold text-ink leading-none">
+                      {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
+                    </p>
+                    <p className="text-[10px] text-ink font-medium mt-1">gallons</p>
+                  </div>
+                  <p className="text-[9px] text-ink-muted mt-2 pb-4 md:pb-0 leading-tight">
                     est. based on <a href="https://waterfootprint.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">WaterFootprint.org</a><br/>per-fiber LCA data
                   </p>
                 </div>
                 <div
-                  className="p-6 text-center"
-                  style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(1.2deg)' }}
+                  className="text-center md:p-6 md:bg-[url(/images/tape.png)] md:bg-cover md:bg-center"
+                  style={{ transform: 'rotate(1.2deg)' }}
                 >
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
-                  <p className="text-[26px] font-bold text-ink leading-none">
-                    {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
-                  </p>
-                  <p className="text-[10px] text-ink font-medium mt-1">pounds</p>
-                  <p className="text-[9px] text-ink-muted mt-2 leading-tight">
+                  <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.png)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
+                    <p className="text-[26px] font-bold text-ink leading-none">
+                      {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
+                    </p>
+                    <p className="text-[10px] text-ink font-medium mt-1">pounds</p>
+                  </div>
+                  <p className="text-[9px] text-ink-muted mt-2 pb-4 md:pb-0 leading-tight">
                     est. based on <a href="https://textileexchange.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">Textile Exchange</a><br/>per-fiber LCA data
                   </p>
                 </div>
@@ -491,10 +500,10 @@ export function ResultView({ id }: ResultViewProps) {
             {data.result.landfill_impact && (() => {
               const li = data.result.landfill_impact!;
               const items: { key: string; label: string; body: string }[] = [
-                { key: 'microplastics', label: 'Microplastics', body: li.microplastics },
-                { key: 'methane', label: 'Methane', body: li.methane },
-                { key: 'dye_runoff', label: 'Dye Runoff', body: li.dye_runoff },
-                { key: 'breakdown', label: 'Breakdown Time', body: li.breakdown_years },
+                { key: 'microplastics', label: 'Microplastics', body: truncateChars(li.microplastics, 100) },
+                { key: 'methane', label: 'Methane', body: truncateChars(li.methane, 100) },
+                { key: 'dye_runoff', label: 'Dye Runoff', body: truncateChars(li.dye_runoff, 100) },
+                { key: 'breakdown', label: 'Breakdown Time', body: truncateChars(li.breakdown_years, 100) },
               ];
               return (
                 <Card>
@@ -504,12 +513,7 @@ export function ResultView({ id }: ResultViewProps) {
                     {items.map((item) => (
                       <div
                         key={item.key}
-                        className="px-5 py-3"
-                        style={{
-                          backgroundImage: 'url(/images/ribbon.png)',
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }}
+                        className="px-5 py-[15px] md:py-3 bg-[url(/images/ribbon.png)] bg-[length:auto_137.5%] bg-no-repeat bg-center md:bg-cover"
                       >
                         <p className="text-[14px] font-bold uppercase tracking-[0.08em] text-ink mb-0.5">{item.label}</p>
                         <p className="text-[14px] leading-[18px] text-ink">{item.body}</p>
