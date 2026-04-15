@@ -234,13 +234,28 @@ export function ResultView({ id }: ResultViewProps) {
               <SectionLabel>Garment</SectionLabel>
 
               <div className="flex flex-wrap sm:flex-nowrap gap-4 items-start relative z-10">
-                {/* Polaroid frame with photo */}
+                {/* Polaroid frame with photo + tag thumbnails in caption area */}
                 {data.previews?.length ? (
                   <div className="flex-shrink-0 relative w-[200px]" style={{ transform: 'rotate(-3deg)' }}>
                     <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '8%', paddingBottom: '28%', paddingLeft: '10%', paddingRight: '10%' }}>
                       <img src={data.previews[0]} alt="Garment" className="w-full h-full object-cover" />
                     </div>
                     <Image src="/images/frame.png" alt="" width={300} height={350} className="relative z-10 w-full h-auto" />
+                    {data.previews.length > 1 && (
+                      <div
+                        className="absolute left-0 right-0 z-20 flex justify-center gap-1.5"
+                        style={{ bottom: '7%', paddingLeft: '12%', paddingRight: '12%' }}
+                      >
+                        {data.previews.slice(1, 4).map((src, i) => (
+                          <img
+                            key={i}
+                            src={src}
+                            alt={`Tag ${i + 1}`}
+                            className="w-[38px] h-[38px] object-cover rounded-[2px] border border-ink/15"
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : null}
 
@@ -324,24 +339,7 @@ export function ResultView({ id }: ResultViewProps) {
                     </>
                   )}
 
-                  {/* Secondary images — mobile: under details */}
-                  {data.previews && data.previews.length > 1 && (
-                    <div className="grid grid-cols-2 gap-2 mt-3 w-fit sm:hidden">
-                      {data.previews.slice(1).map((src, i) => (
-                        <img key={i} src={src} alt={`Tag ${i + 1}`} className="w-[56px] h-[56px] rounded-lg object-cover border border-rule" />
-                      ))}
-                    </div>
-                  )}
                 </div>
-
-                {/* Secondary images — desktop: far right stacked */}
-                {data.previews && data.previews.length > 1 && (
-                  <div className="hidden sm:flex flex-col gap-2 flex-shrink-0">
-                    {data.previews.slice(1).map((src, i) => (
-                      <img key={i} src={src} alt={`Tag ${i + 1}`} className="w-[56px] h-[56px] rounded-lg object-cover border border-rule" />
-                    ))}
-                  </div>
-                )}
               </div>
             </Card>
 

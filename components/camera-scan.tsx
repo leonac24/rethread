@@ -182,10 +182,12 @@ export function CameraScan() {
               <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
               <div className="absolute z-20" style={{ bottom: '6%', left: '16%', right: '16%' }}>
                 <UploadButton
-                  label="Upload Tags"
-                  disabled={isLoading}
+                  label={staged.length >= 3 ? 'Tags Full (3/3)' : 'Upload Tags'}
+                  disabled={isLoading || staged.length >= 3}
                   multiple
-                  onFiles={(files) => setStaged((prev) => [...prev, ...files])}
+                  onFiles={(files) =>
+                    setStaged((prev) => [...prev, ...files].slice(0, 3))
+                  }
                   buttonClassName="h-[7vw] sm:h-9 text-[2vw] sm:text-[13px]"
                   buttonStyle={{ fontFamily: 'var(--font-handwriting)' }}
                 />

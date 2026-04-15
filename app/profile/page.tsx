@@ -39,56 +39,54 @@ function getNextTier(scans: number) {
   return null;
 }
 
-function ScoreDot({ score }: { score: number }) {
-  const color = score >= 7 ? '#3f5338' : score >= 4 ? '#b07d2e' : '#a83232';
-  const label = score >= 7 ? 'Good' : score >= 4 ? 'Fair' : 'Poor';
+function ClosetItem({ label, date, img }: (typeof MOCK_SCANS)[number]) {
   return (
-    <span
-      className="inline-flex items-center gap-1 text-[11px] font-bold"
-      style={{ color }}
-    >
-      <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: color }} />
-      {score}/10 · {label}
-    </span>
-  );
-}
-
-function ClosetItem({ label, fiber, score, date, img }: (typeof MOCK_SCANS)[number]) {
-  return (
-    <div className="flex flex-col items-center w-full">
-      {/* hanger on top */}
-      <Image
-        src="/images/hanger.png"
-        alt=""
-        width={140}
-        height={80}
-        className="w-[135px] h-auto object-contain relative z-10 mb-[-27px]"
-      />
-
-      {/* garment card */}
+    <div className="relative w-full">
+      {/* Garment photo in upper area */}
       <div
-        className="relative w-full rounded-xl overflow-hidden bg-surface border border-rule"
-        style={{ paddingTop: '110%' }}
+        className="absolute inset-0 flex items-center justify-center"
+        style={{
+          paddingTop: '8%',
+          paddingBottom: '28%',
+          paddingLeft: '10%',
+          paddingRight: '10%',
+        }}
       >
-        <div className="absolute inset-0 flex items-center justify-center p-4">
-          <Image
-            src={img}
-            alt={label}
-            width={200}
-            height={200}
-            className="w-full h-full object-contain"
-          />
-        </div>
+        <Image
+          src={img}
+          alt={label}
+          width={200}
+          height={200}
+          className="w-full h-full object-contain"
+        />
       </div>
 
-      {/* metadata below */}
-      <div className="mt-2 w-full text-center px-1">
-        <p className="text-[13px] font-bold text-ink leading-tight truncate">{label}</p>
-        <p className="text-[11px] text-ink-muted mt-0.5 leading-tight line-clamp-2">{fiber}</p>
-        <div className="mt-1">
-          <ScoreDot score={score} />
-        </div>
-        <p className="text-[10px] text-ink-faint mt-0.5 font-medium">{date}</p>
+      {/* Polaroid frame */}
+      <Image
+        src="/images/frame.png"
+        alt=""
+        width={300}
+        height={350}
+        className="relative z-10 w-full h-auto"
+      />
+
+      {/* Caption — label + date, handwritten feel */}
+      <div
+        className="absolute left-0 right-0 z-20 text-center"
+        style={{ bottom: '6%', paddingLeft: '12%', paddingRight: '12%' }}
+      >
+        <p
+          className="text-[11px] md:text-[12px] font-bold text-ink truncate leading-tight"
+          style={{ fontFamily: 'var(--font-handwriting)' }}
+        >
+          {label}
+        </p>
+        <p
+          className="text-[9px] md:text-[10px] text-ink-muted mt-0.5 leading-tight"
+          style={{ fontFamily: 'var(--font-handwriting)' }}
+        >
+          {date}
+        </p>
       </div>
     </div>
   );
@@ -98,41 +96,46 @@ function AddClosetTile() {
   return (
     <Link
       href="/scan"
-      className="flex flex-col items-center w-full group"
+      className="relative block w-full group"
       aria-label="Add to Closet"
     >
-      {/* hanger on top — matches ClosetItem structure exactly */}
-      <Image
-        src="/images/hanger.png"
-        alt=""
-        width={140}
-        height={80}
-        className="w-[135px] h-auto object-contain relative z-10 mb-[-27px] opacity-60"
-      />
-
-      {/* card area — dashed "empty slot" with + and label */}
+      {/* Empty slot with dashed + in upper area */}
       <div
-        className="relative w-full rounded-xl overflow-hidden bg-ink/5 border-2 border-dashed border-rule transition-colors group-hover:bg-ink/10"
-        style={{ paddingTop: '110%' }}
+        className="absolute inset-0 flex items-center justify-center"
+        style={{
+          paddingTop: '8%',
+          paddingBottom: '28%',
+          paddingLeft: '10%',
+          paddingRight: '10%',
+        }}
       >
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-          <span className="text-[52px] leading-none font-light text-ink-muted">+</span>
-          <span className="text-[12px] font-bold tracking-[0.08em] uppercase text-ink-muted">
-            Add to Closet
+        <div className="w-full h-full border-2 border-dashed border-ink/25 flex items-center justify-center bg-ink/[0.03] transition-colors group-hover:bg-ink/[0.07]">
+          <span className="text-[44px] leading-none font-light text-ink-muted">
+            +
           </span>
         </div>
       </div>
 
-      {/* invisible metadata placeholder so total tile height matches ClosetItem */}
-      <div className="mt-2 w-full text-center px-1 invisible" aria-hidden>
-        <p className="text-[13px] font-bold leading-tight">&nbsp;</p>
-        <p className="text-[11px] mt-0.5 leading-tight">
-          &nbsp;
-          <br />
-          &nbsp;
+      {/* Polaroid frame */}
+      <Image
+        src="/images/frame.png"
+        alt=""
+        width={300}
+        height={350}
+        className="relative z-10 w-full h-auto"
+      />
+
+      {/* Caption */}
+      <div
+        className="absolute left-0 right-0 z-20 text-center"
+        style={{ bottom: '6%', paddingLeft: '12%', paddingRight: '12%' }}
+      >
+        <p
+          className="text-[11px] md:text-[12px] font-bold text-ink truncate leading-tight"
+          style={{ fontFamily: 'var(--font-handwriting)' }}
+        >
+          Add to Closet
         </p>
-        <p className="text-[11px] mt-1">&nbsp;</p>
-        <p className="text-[10px] mt-0.5">&nbsp;</p>
       </div>
     </Link>
   );
