@@ -65,8 +65,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how" className="border-t border-rule">
-        <div className={`${CONTENT_WIDTH} py-5 md:py-8`}>
+      <section id="how">
+        <div className={`${CONTENT_WIDTH} py-5 md:py-8 border-t border-rule`}>
           <div className="flex flex-col gap-8">
 
             {/* Row 1: Card left, image right */}
