@@ -241,7 +241,7 @@ export function ResultView({ id }: ResultViewProps) {
                     >
                       <img src={data.previews[0]} alt="Garment" className="w-full h-full object-cover pointer-events-none" />
                     </button>
-                    <Image src="/images/frame.png" alt="" width={300} height={350} className="relative z-10 w-full h-auto pointer-events-none" />
+                    <Image src="/images/frame.webp" alt="" width={300} height={350} className="relative z-10 w-full h-auto pointer-events-none" />
                     {data.previews.length > 1 && (
                       <div
                         className="absolute left-0 right-0 z-20 flex justify-center gap-1.5"
@@ -347,7 +347,7 @@ export function ResultView({ id }: ResultViewProps) {
                 viewport={{ once: true, amount: 0.25 }}
                 transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
               >
-              <Card style={{ backgroundImage: 'url(/images/burlap.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: 'none', backgroundColor: 'transparent' }}>
+              <Card style={{ backgroundImage: 'url(/images/burlap.webp)', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: 'none', backgroundColor: 'transparent' }}>
                 <SectionLabel><span className="text-ink bg-white px-1">Fiber Composition</span></SectionLabel>
 
                 {/* SVG defs — crumpled-paper pattern tinted per fiber color */}
@@ -439,13 +439,13 @@ export function ResultView({ id }: ResultViewProps) {
               {/* Water + CO2 ripped paper cards */}
               <div className="grid grid-cols-2 gap-[34px] mb-1 md:mb-4">
                 <motion.div
-                  className="text-center md:p-6 md:bg-[url(/images/tape.png)] md:bg-cover md:bg-center"
+                  className="text-center md:p-6 md:bg-[url(/images/tape.webp)] md:bg-cover md:bg-center"
                   initial={{ opacity: 0, y: -24, rotate: -14 }}
                   whileInView={{ opacity: 1, y: 0, rotate: -1.5 }}
                   viewport={{ once: true, amount: 0.3 }}
                   transition={{ type: 'spring', stiffness: 180, damping: 14, delay: 0.05 }}
                 >
-                  <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.png)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
+                  <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.webp)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
                     <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
                     <p className="text-[26px] font-bold text-ink leading-none">
                       {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
@@ -457,13 +457,13 @@ export function ResultView({ id }: ResultViewProps) {
                   </p>
                 </motion.div>
                 <motion.div
-                  className="text-center md:p-6 md:bg-[url(/images/tape.png)] md:bg-cover md:bg-center"
+                  className="text-center md:p-6 md:bg-[url(/images/tape.webp)] md:bg-cover md:bg-center"
                   initial={{ opacity: 0, y: -24, rotate: 14 }}
                   whileInView={{ opacity: 1, y: 0, rotate: 1.2 }}
                   viewport={{ once: true, amount: 0.3 }}
                   transition={{ type: 'spring', stiffness: 180, damping: 14, delay: 0.18 }}
                 >
-                  <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.png)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
+                  <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.webp)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
                     <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
                     <p className="text-[26px] font-bold text-ink leading-none">
                       {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
@@ -530,7 +530,7 @@ export function ResultView({ id }: ResultViewProps) {
                     {items.map((item, i) => (
                       <motion.div
                         key={item.key}
-                        className="px-5 py-[15px] md:py-3 bg-[url(/images/ribbon.png)] bg-[length:auto_137.5%] bg-no-repeat bg-center md:bg-cover"
+                        className="px-5 py-[15px] md:py-3 bg-[url(/images/ribbon.webp)] bg-[length:auto_137.5%] bg-no-repeat bg-center md:bg-cover"
                         initial={{ opacity: 0, x: -28 }}
                         whileInView={{ opacity: 1, x: 0 }}
                         viewport={{ once: true, amount: 0.3 }}
@@ -605,7 +605,7 @@ export function ResultView({ id }: ResultViewProps) {
             <div className="flex justify-center">
             <div
               className="overflow-hidden w-64"
-              style={{ backgroundImage: 'url(/images/receipt.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+              style={{ backgroundImage: 'url(/images/receipt.webp)', backgroundSize: 'cover', backgroundPosition: 'center' }}
             >
               <button
                 onClick={() => setOcrOpen((v) => !v)}

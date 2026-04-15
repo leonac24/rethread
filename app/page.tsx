@@ -8,7 +8,7 @@ export default function Home() {
     <main className="min-h-screen flex flex-col">
       <section className="relative flex items-start overflow-hidden" style={{ minHeight: 'calc((100vh - 80px) * 2 / 3)' }}>
         <div className="hidden xl:block absolute top-1/2 -translate-y-1/2" style={{ left: '-44px' }}>
-          <Image src="/images/shoelace.png" alt="Shoelace" width={312} height={390} className="object-contain opacity-80" />
+          <Image src="/images/shoelace.webp" alt="Shoelace" width={312} height={390} className="object-contain opacity-80" />
         </div>
         <div className={`${CONTENT_WIDTH} pb-5 md:pb-8 relative flex items-center justify-between gap-8`}>
           <div className="relative z-10 flex-1">
@@ -73,7 +73,7 @@ export default function Home() {
               <div className="aspect-square">
                 <article
                   className="h-full p-[15%] relative flex flex-col items-center justify-center text-center"
-                  style={{ backgroundImage: 'url(/images/paper.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+                  style={{ backgroundImage: 'url(/images/paper.webp)', backgroundSize: 'cover', backgroundPosition: 'center' }}
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6">
                     <span className="text-[10px] sm:text-[13px] md:text-[16px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-4">Ingest</span>
@@ -83,7 +83,7 @@ export default function Home() {
                 </article>
               </div>
               <div className="aspect-square flex items-center justify-center">
-                <Image src="/images/clothing pile.png" alt="Clothing pile" width={300} height={300} className="w-full h-full object-contain scale-[1.3]" />
+                <Image src="/images/clothing pile.webp" alt="Clothing pile" width={300} height={300} className="w-full h-full object-contain scale-[1.3]" />
               </div>
             </div>
 
@@ -92,7 +92,7 @@ export default function Home() {
               <div className="aspect-square order-1 md:order-2">
                 <article
                   className="h-full p-[15%] relative flex flex-col items-center justify-center text-center"
-                  style={{ backgroundImage: 'url(/images/paper.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+                  style={{ backgroundImage: 'url(/images/paper.webp)', backgroundSize: 'cover', backgroundPosition: 'center' }}
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6">
                     <span className="text-[10px] sm:text-[13px] md:text-[16px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-4">Cost</span>
@@ -102,7 +102,7 @@ export default function Home() {
                 </article>
               </div>
               <div className="aspect-square flex items-center justify-center order-2 md:order-1">
-                <Image src="/images/recycle.png" alt="Recycling symbol made of jeans" width={300} height={300} className="w-full h-full object-contain" />
+                <Image src="/images/recycle.webp" alt="Recycling symbol made of jeans" width={300} height={300} className="w-full h-full object-contain" />
               </div>
             </div>
 
@@ -111,7 +111,7 @@ export default function Home() {
               <div className="aspect-square">
                 <article
                   className="h-full p-[15%] relative flex flex-col items-center justify-center text-center"
-                  style={{ backgroundImage: 'url(/images/paper.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+                  style={{ backgroundImage: 'url(/images/paper.webp)', backgroundSize: 'cover', backgroundPosition: 'center' }}
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6">
                     <span className="text-[10px] sm:text-[13px] md:text-[16px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-4">Route</span>
@@ -121,7 +121,7 @@ export default function Home() {
                 </article>
               </div>
               <div className="aspect-square flex items-center justify-center">
-                <Image src="/images/folded clothes.png" alt="Folded clothes" width={300} height={300} className="w-full h-full object-contain" />
+                <Image src="/images/folded clothes.webp" alt="Folded clothes" width={300} height={300} className="w-full h-full object-contain" />
               </div>
             </div>
 

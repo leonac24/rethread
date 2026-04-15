@@ -151,9 +151,9 @@ export function CameraScan() {
           <div className="flex flex-col items-center w-full">
             <div className="relative w-[130%] -mx-[15%]">
               <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '0%', paddingBottom: '16%', paddingLeft: '2%', paddingRight: '2%', transform: 'scale(1.3)', transformOrigin: 'center center' }}>
-                <Image src="/images/garment.png" alt="Garment" width={200} height={200} className="w-full h-full object-contain" />
+                <Image src="/images/garment.webp" alt="Garment" width={200} height={200} className="w-full h-full object-contain" />
               </div>
-              <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
+              <Image src="/images/frame.webp" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
               <div className="absolute z-20" style={{ bottom: '6%', left: '16%', right: '16%' }}>
                 <UploadButton
                   label="Upload Garment"
@@ -177,9 +177,9 @@ export function CameraScan() {
           <div className="flex flex-col items-center w-full">
             <div className="relative w-[130%] -mx-[15%]">
               <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '0%', paddingBottom: '16%', paddingLeft: '2%', paddingRight: '2%', transform: 'scale(1.3) translateY(20px)', transformOrigin: 'center center' }}>
-                <Image src="/images/tag.png" alt="Tag" width={200} height={200} className="w-full h-full object-contain" />
+                <Image src="/images/tag.webp" alt="Tag" width={200} height={200} className="w-full h-full object-contain" />
               </div>
-              <Image src="/images/frame.png" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
+              <Image src="/images/frame.webp" alt="" width={600} height={700} className="relative z-10 w-full h-auto" />
               <div className="absolute z-20" style={{ bottom: '6%', left: '16%', right: '16%' }}>
                 <UploadButton
                   label={staged.length >= 3 ? 'Tags Full (3/3)' : 'Upload Tags'}
