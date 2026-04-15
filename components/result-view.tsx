@@ -21,39 +21,6 @@ function truncate(text: string, maxWords: number): string {
   return words.slice(0, maxWords).join(' ') + '...';
 }
 
-const COUNTRY_COORDS: Record<string, [number, number]> = {
-  'usa': [38, -97], 'united states': [38, -97], 'us': [38, -97], 'america': [38, -97],
-  'china': [35, 105], 'bangladesh': [23.7, 90.4], 'india': [20, 77],
-  'vietnam': [14, 108], 'cambodia': [12.5, 104.9], 'indonesia': [-0.8, 113.9],
-  'pakistan': [30, 70], 'turkey': [38.9, 35.2], 'mexico': [23.6, -102.5],
-  'sri lanka': [7.9, 80.8], 'ethiopia': [9.1, 40.5], 'portugal': [39.4, -8.2],
-  'italy': [41.9, 12.6], 'france': [46.2, 2.2], 'germany': [51.2, 10.4],
-  'uk': [51.5, -0.1], 'united kingdom': [51.5, -0.1], 'japan': [36.2, 138.3],
-  'south korea': [35.9, 127.8], 'korea': [35.9, 127.8], 'taiwan': [23.7, 121],
-  'thailand': [15.9, 100.9], 'malaysia': [4.2, 108], 'myanmar': [19.2, 96.7],
-  'morocco': [31.8, -7.1], 'peru': [-9.2, -75], 'brazil': [-14.2, -51.9],
-  'colombia': [4.6, -74.1], 'honduras': [15.2, -86.2], 'guatemala': [15.8, -90.2],
-  'el salvador': [13.8, -88.9], 'haiti': [18.9, -72.3], 'egypt': [26, 30],
-  'philippines': [12.9, 121.8], 'nepal': [28.4, 84.1],
-};
-
-function countryMapSrcdoc(country: string): string | null {
-  const coords = COUNTRY_COORDS[country.toLowerCase().trim()];
-  if (!coords) return null;
-  const [lat, lng] = coords;
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
-<style>html,body{margin:0;height:100%}#m{height:100%}.leaflet-control-attribution,.leaflet-control-zoom{display:none!important}</style>
-</head><body><div id="m"></div><script>
-var m=L.map('m',{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false,touchZoom:false}).setView([${lat},${lng}],2);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd'}).addTo(m);
-var icon=L.icon({iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',iconRetinaUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',shadowUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',iconSize:[18,30],iconAnchor:[9,30],shadowSize:[30,30]});
-L.marker([${lat},${lng}],{icon:icon}).addTo(m);
-<\/script></body></html>`;
-}
-
 function mapsUrl(route: RouteOption): string {
   const query = encodeURIComponent(route.name + ', ' + route.address);
   return `https://www.google.com/maps/search/?api=1&query=${query}`;
@@ -157,6 +124,16 @@ export function ResultView({ id }: ResultViewProps) {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setLightboxSrc(null);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [lightboxSrc]);
 
   useEffect(() => {
     let isActive = true;
@@ -217,7 +194,14 @@ export function ResultView({ id }: ResultViewProps) {
 
         {data && (
           <>
-            {/* ── Garment Hero ─────────────────────────────────────── */}
+            {/* ── Garment Hero + Fiber Composition row ─────────────── */}
+            <div
+              className={
+                fiberData.length > 0
+                  ? 'space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-stretch'
+                  : ''
+              }
+            >
             <Card className="relative overflow-hidden">
               {/* Watermark category text */}
               {data.result.garment.category && (
@@ -233,26 +217,39 @@ export function ResultView({ id }: ResultViewProps) {
 
               <SectionLabel>Garment</SectionLabel>
 
-              <div className="flex flex-wrap sm:flex-nowrap gap-4 items-start relative z-10">
+              <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start relative z-10">
                 {/* Polaroid frame with photo + tag thumbnails in caption area */}
                 {data.previews?.length ? (
                   <div className="flex-shrink-0 relative w-[200px]" style={{ transform: 'rotate(-3deg)' }}>
-                    <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '8%', paddingBottom: '28%', paddingLeft: '10%', paddingRight: '10%' }}>
-                      <img src={data.previews[0]} alt="Garment" className="w-full h-full object-cover" />
-                    </div>
-                    <Image src="/images/frame.png" alt="" width={300} height={350} className="relative z-10 w-full h-auto" />
+                    <button
+                      type="button"
+                      onClick={() => setLightboxSrc(data.previews![0])}
+                      className="absolute inset-0 flex items-center justify-center cursor-zoom-in"
+                      style={{ paddingTop: '8%', paddingBottom: '28%', paddingLeft: '10%', paddingRight: '10%' }}
+                      aria-label="Expand garment photo"
+                    >
+                      <img src={data.previews[0]} alt="Garment" className="w-full h-full object-cover pointer-events-none" />
+                    </button>
+                    <Image src="/images/frame.png" alt="" width={300} height={350} className="relative z-10 w-full h-auto pointer-events-none" />
                     {data.previews.length > 1 && (
                       <div
                         className="absolute left-0 right-0 z-20 flex justify-center gap-1.5"
                         style={{ bottom: '7%', paddingLeft: '12%', paddingRight: '12%' }}
                       >
                         {data.previews.slice(1, 4).map((src, i) => (
-                          <img
+                          <button
                             key={i}
-                            src={src}
-                            alt={`Tag ${i + 1}`}
-                            className="w-[38px] h-[38px] object-cover rounded-[2px] border border-ink/15"
-                          />
+                            type="button"
+                            onClick={() => setLightboxSrc(src)}
+                            className="cursor-zoom-in"
+                            aria-label={`Expand tag photo ${i + 1}`}
+                          >
+                            <img
+                              src={src}
+                              alt={`Tag ${i + 1}`}
+                              className="w-[38px] h-[38px] object-cover rounded-[2px] border border-ink/15 pointer-events-none"
+                            />
+                          </button>
                         ))}
                       </div>
                     )}
@@ -319,24 +316,12 @@ export function ResultView({ id }: ResultViewProps) {
                   )}
 
                   {data.result.garment.origin && (
-                    <>
-                      <div className="flex items-center gap-2 mt-2">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint flex-shrink-0">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                        </svg>
-                        <p className="text-[15px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
-                      </div>
-                      {countryMapSrcdoc(data.result.garment.origin) && (
-                        <iframe
-                          srcDoc={countryMapSrcdoc(data.result.garment.origin)!}
-                          sandbox="allow-scripts"
-                          className="w-full mt-3 rounded-lg border-0 pointer-events-none"
-                          style={{ height: 100 }}
-                          loading="lazy"
-                          title={`Map of ${data.result.garment.origin}`}
-                        />
-                      )}
-                    </>
+                    <div className="flex items-center gap-2 mt-2">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint flex-shrink-0">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                      </svg>
+                      <p className="text-[15px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
+                    </div>
                   )}
 
                 </div>
@@ -397,6 +382,7 @@ export function ResultView({ id }: ResultViewProps) {
                 </div>
               </Card>
             )}
+            </div>
 
             {/* ── Environmental Impact ─────────────────────────────── */}
             <Card>
@@ -582,6 +568,34 @@ export function ResultView({ id }: ResultViewProps) {
           </>
         )}
       </div>
+
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setLightboxSrc(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded image"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxSrc}
+            alt="Expanded view"
+            className="max-w-full max-h-full object-contain"
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxSrc(null);
+            }}
+            aria-label="Close expanded view"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/15 backdrop-blur-md text-white text-[22px] leading-none flex items-center justify-center hover:bg-white/25 cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </main>
   );
 }
