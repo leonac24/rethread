@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import ScrollToButton from '@/components/scroll-to-button';
 
 const CONTENT_WIDTH = 'content-width';
 
@@ -42,12 +43,12 @@ export default function Home() {
               >
                 Begin scan
               </Link>
-              <Link
-                href="#how"
-                className="text-[16px] text-ink-muted hover:text-ink hover:underline underline-offset-4"
+              <ScrollToButton
+                targetId="how"
+                className="text-[16px] text-ink-muted hover:text-ink hover:underline underline-offset-4 cursor-pointer"
               >
                 How it works
-              </Link>
+              </ScrollToButton>
             </div>
           </div>
 
