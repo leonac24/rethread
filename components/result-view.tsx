@@ -8,10 +8,6 @@ import {
   Cell,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
 } from 'recharts';
 import type { RouteOption, ScanResult } from '@/types/garment';
 
@@ -182,6 +178,15 @@ export function ResultView({ id }: ResultViewProps) {
 
   return (
     <main className="min-h-screen bg-bg md:pt-[80px]">
+      {/* Shared torn-edge filter — used by fiber donut and dye bar */}
+      <svg width="0" height="0" aria-hidden className="absolute">
+        <defs>
+          <filter id="torn-edge" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="7" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" />
+          </filter>
+        </defs>
+      </svg>
       <div className="pb-10 pt-2 space-y-3 content-width">
 
         {/* Loading / Error */}
@@ -332,6 +337,31 @@ export function ResultView({ id }: ResultViewProps) {
             {fiberData.length > 0 && (
               <Card style={{ backgroundImage: 'url(/images/burlap.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: 'none', backgroundColor: 'transparent' }}>
                 <SectionLabel><span className="text-ink bg-white px-1">Fiber Composition</span></SectionLabel>
+
+                {/* SVG defs — crumpled-paper pattern tinted per fiber color */}
+                <svg width="0" height="0" aria-hidden className="absolute">
+                  <defs>
+                    {FIBER_COLORS.map((color, i) => (
+                      <pattern
+                        key={i}
+                        id={`fiber-paper-${i}`}
+                        patternUnits="userSpaceOnUse"
+                        width="420"
+                        height="420"
+                      >
+                        <rect width="420" height="420" fill={color} />
+                        <image
+                          href="/images/paperbar.webp"
+                          width="420"
+                          height="420"
+                          preserveAspectRatio="xMidYMid slice"
+                          style={{ mixBlendMode: 'luminosity', filter: 'brightness(0.82) contrast(1.1)' }}
+                        />
+                      </pattern>
+                    ))}
+                  </defs>
+                </svg>
+
                 <div style={{ height: 180 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -347,7 +377,12 @@ export function ResultView({ id }: ResultViewProps) {
                         endAngle={-270}
                       >
                         {fiberData.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={FIBER_COLORS[index % FIBER_COLORS.length]} />
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={`url(#fiber-paper-${index % FIBER_COLORS.length})`}
+                            stroke="none"
+                            filter="url(#torn-edge)"
+                          />
                         ))}
                       </Pie>
                       <Tooltip
@@ -418,19 +453,26 @@ export function ResultView({ id }: ResultViewProps) {
                 </div>
               </div>
 
-              {/* Dye risk bar chart */}
+              {/* Dye risk bar — crumpled-paper fill tinted by dye color */}
               <div className="rounded-xl bg-bg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[14px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Dye Risk</p>
                   <span className="text-[15px] font-bold" style={{ color: dyeColor }}>{dyeScore}/10</span>
                 </div>
-                <ResponsiveContainer width="100%" height={52}>
-                  <BarChart data={[{ value: dyeScore }]} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                    <XAxis type="number" domain={[0, 10]} hide />
-                    <YAxis type="category" dataKey="value" hide />
-                    <Bar dataKey="value" fill={dyeColor} radius={4} background={{ fill: 'rgba(20,22,26,0.07)', radius: 4 }} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="relative w-full h-[28px] bg-ink/[0.07] rounded-md">
+                  <div
+                    className="absolute top-[-5px] bottom-[-5px] left-0"
+                    style={{
+                      width: `${Math.max(0, Math.min(10, dyeScore)) * 10}%`,
+                      backgroundColor: dyeColor,
+                      backgroundImage: 'url(/images/paperbar.webp)',
+                      backgroundSize: '520px',
+                      backgroundPosition: 'center',
+                      backgroundBlendMode: 'luminosity',
+                      filter: 'url(#torn-edge) brightness(0.82) contrast(1.1)',
+                    }}
+                  />
+                </div>
                 {data.result.cost.dye_type && (
                   <p className="text-[14px] font-medium text-ink mt-2">{data.result.cost.dye_type}</p>
                 )}
