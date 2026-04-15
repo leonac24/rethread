@@ -1,12 +1,22 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export default function Header() {
+  const pathname = usePathname();
+  const isHome = pathname === '/';
+
   return (
     <header className="relative z-20 pt-4 pb-2 md:pb-0">
       <div className="content-width grid grid-cols-3 items-center">
         <div aria-hidden />
-        <Link href="/" aria-label="Rethread home" className="justify-self-center">
+        <Link
+          href="/"
+          aria-label="Rethread home"
+          className={`justify-self-center ${isHome ? 'md:translate-y-[140px]' : ''}`}
+        >
           <Image
             src="/images/hero.webp"
             alt="Rethread"
