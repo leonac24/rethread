@@ -64,6 +64,7 @@ export async function POST(
 
     const outcomeRef = db().collection('outcomes').doc();
     const userRef = db().collection('users').doc(user.uid);
+    const userScanRef = userRef.collection('scans').doc(id);
 
     // Atomic batch — both writes succeed or both fail.
     // Use set+merge on userRef (not update) so the write succeeds even if the
@@ -86,6 +87,13 @@ export async function POST(
       },
       { merge: true },
     );
+    batch.set(userScanRef, {
+      scanId: id,
+      action,
+      result: stored.result,
+      text: stored.text,
+      createdAt: FieldValue.serverTimestamp(),
+    });
 
     // Degrade gracefully — Firestore failure must not fail the outcome response.
     // The outcome is already recorded in the scan store; the user just won't get
