@@ -37,6 +37,7 @@ export async function GET(
       result: ScanResult;
       text: string;
       createdAt?: FirebaseFirestore.Timestamp;
+      imageUrls?: string[];
     };
 
     return Response.json({
@@ -45,6 +46,7 @@ export async function GET(
       result: data.result,
       text: data.text,
       createdAt: data.createdAt?.toMillis() ?? 0,
+      imageUrls: data.imageUrls ?? [],
     });
   } catch (err) {
     console.error('[user/scans/:scanId] Firestore error', {

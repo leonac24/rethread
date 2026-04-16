@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth-context';
+import { uploadScanImages } from '@/lib/firebase/upload-scan-images';
 import type { EnvironmentalCost, GarmentCondition, OutcomeAction } from '@/types/garment';
 
 type Status = 'idle' | 'confirming' | 'loading' | 'done' | 'conflict' | 'error';
@@ -144,10 +145,32 @@ export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
         const token = await firebaseUser.getIdToken();
         headers.Authorization = `Bearer ${token}`;
       }
+
+      let imageUrls: string[] = [];
+      if (firebaseUser && action !== 'throw_away') {
+        try {
+          const raw = sessionStorage.getItem(`scan:${id}`);
+          if (raw) {
+            const parsed = JSON.parse(raw) as { previews?: string[] };
+            const previews = Array.isArray(parsed.previews) ? parsed.previews : [];
+            if (previews.length > 0) {
+              imageUrls = await uploadScanImages({
+                uid: firebaseUser.uid,
+                scanId: id,
+                dataUrls: previews,
+              });
+            }
+          }
+        } catch (err) {
+          console.error('[outcome-section] image upload failed', err);
+        }
+      }
+
+      const body = imageUrls.length > 0 ? { action, imageUrls } : { action };
       const res = await fetch(`/api/scan/${id}/outcome`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(body),
       });
 
       if (res.status === 409) {

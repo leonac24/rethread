@@ -46,6 +46,14 @@ export async function POST(
     );
   }
 
+  const rawImageUrls = (body as Record<string, unknown>).imageUrls;
+  let imageUrls: string[] = [];
+  if (Array.isArray(rawImageUrls)) {
+    imageUrls = rawImageUrls
+      .filter((url): url is string => typeof url === 'string' && url.startsWith('https://'))
+      .slice(0, 10);
+  }
+
   const { conflict, stored } = await recordOutcome(id, action as OutcomeAction);
 
   if (!stored) {
@@ -93,6 +101,7 @@ export async function POST(
       result: stored.result,
       text: stored.text,
       createdAt: FieldValue.serverTimestamp(),
+      ...(imageUrls.length > 0 ? { imageUrls } : {}),
     });
 
     // Degrade gracefully — Firestore failure must not fail the outcome response.

@@ -23,12 +23,14 @@ export async function GET(request: Request) {
         action: OutcomeAction;
         result: ScanResult;
         createdAt?: FirebaseFirestore.Timestamp;
+        imageUrls?: string[];
       };
       return {
         scanId: data.scanId,
         action: data.action,
         result: data.result,
         createdAt: data.createdAt?.toMillis() ?? 0,
+        imageUrls: data.imageUrls ?? [],
       };
     });
 
