@@ -1,5 +1,8 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
+import { useAuth } from '@/lib/firebase/auth-context';
 
 const MOCK_SCANS = [
   { id: '1', label: "Levi's 501 Jeans", fiber: '100% Cotton', score: 6, date: 'Apr 9', img: '/images/garment.webp' },
@@ -7,13 +10,6 @@ const MOCK_SCANS = [
   { id: '3', label: 'H&M Basic Tee', fiber: '60% Cotton / 40% Polyester', score: 4, date: 'Apr 3', img: '/images/garment.webp' },
   { id: '4', label: 'Zara Blazer', fiber: '80% Viscose / 20% Polyester', score: 3, date: 'Mar 28', img: '/images/garment.webp' },
   { id: '5', label: 'Nike Hoodie', fiber: '80% Cotton / 20% Polyester', score: 5, date: 'Mar 20', img: '/images/garment.webp' },
-];
-
-const STATS = [
-  { label: 'Garments Scanned', value: '12' },
-  { label: 'Items Rerouted', value: '7' },
-  { label: 'CO₂ Offset (lbs)', value: '34' },
-  { label: 'Water Saved (gal)', value: '2,400' },
 ];
 
 const TIERS = [
@@ -180,12 +176,46 @@ function RankBadge({
 }
 
 export default function ProfilePage() {
-  const scanCount = 12;
+  const { user, loading } = useAuth();
+
+  const scanCount = user?.actionCount ?? 12;
   const currentTier = getTier(scanCount);
   const nextTier = getNextTier(scanCount);
   const progressToNext = nextTier
     ? ((scanCount - currentTier.min) / (nextTier.min - currentTier.min)) * 100
     : 100;
+
+  const co2Lbs = user ? ((user.totalCO2SavedKg ?? 0) * 2.205).toFixed(1) : '34';
+  const waterGal = user ? Math.round((user.totalWaterSavedLiters ?? 0) * 0.264).toLocaleString() : '2,400';
+
+  const STATS = [
+    { label: 'Garments Scanned', value: user ? String(scanCount) : '12' },
+    { label: 'Items Rerouted', value: user ? String(user.actionCount ?? 0) : '7' },
+    { label: 'CO₂ Saved (lbs)', value: co2Lbs },
+    { label: 'Water Saved (gal)', value: waterGal },
+  ];
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-ink-faint border-t-ink animate-spin" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-bg flex flex-col items-center justify-center gap-4 px-4">
+        <p className="text-[16px] text-ink-muted text-center">Sign in to see your impact profile.</p>
+        <a
+          href="/login"
+          className="inline-flex items-center justify-center h-11 px-8 rounded-md bg-ink text-bg text-[14px] font-medium transition-opacity hover:opacity-80"
+        >
+          Sign in
+        </a>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-bg py-8">
@@ -197,18 +227,27 @@ export default function ProfilePage() {
           <div className="grid grid-cols-2 items-center">
             <div className="flex justify-start md:justify-center">
               <div className="flex flex-col items-center shrink-0">
-                <div className="w-[90px] h-[90px] md:w-[120px] md:h-[120px] rounded-full overflow-hidden">
-                  <Image
-                    src="/images/pfphead.webp"
-                    alt="Profile photo"
-                    width={200}
-                    height={200}
-                    className="w-full h-full object-cover"
-                  />
+                <div className="w-[90px] h-[90px] md:w-[120px] md:h-[120px] rounded-full overflow-hidden border-2 border-rule">
+                  {user.photoURL ? (
+                    <Image
+                      src={user.photoURL}
+                      alt={user.displayName ?? 'Profile'}
+                      width={200}
+                      height={200}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-accent-200 flex items-center justify-center text-[40px] font-bold text-accent-700">
+                      {(user.displayName ?? user.email ?? '?')[0]?.toUpperCase()}
+                    </div>
+                  )}
                 </div>
-                <h1 className="mt-2 md:mt-3 text-[18px] md:text-[22px] font-bold text-ink">Leona Chen</h1>
+                <h1 className="mt-2 md:mt-3 text-[18px] md:text-[22px] font-bold text-ink">
+                  {user.displayName ?? 'Anonymous'}
+                </h1>
                 <p className="text-[12px] md:text-[13px] text-ink-muted mt-0.5">
-                  @leonac<span className="hidden md:inline"> · Since Apr 2025</span>
+                  {user.email}
                 </p>
               </div>
             </div>
@@ -222,11 +261,6 @@ export default function ProfilePage() {
               />
             </div>
           </div>
-
-          {/* Since — mobile only, below both pfp block and badge */}
-          <p className="md:hidden mt-4 text-center text-[12px] text-ink-muted">
-            Since Apr 2025
-          </p>
         </div>
 
         {/* ── Stats grid ── */}

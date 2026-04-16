@@ -3,6 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono, Architects_Daughter } from 'next/font/
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import './globals.css';
+import { AuthProvider } from '@/lib/firebase/auth-context';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -45,9 +46,11 @@ export default function RootLayout({
       className={`${inter.variable} ${fraunces.variable} ${jetbrainsMono.variable} ${architectsDaughter.variable}`}
     >
       <body>
-        <Header />
-        {children}
-        <Footer />
+        <AuthProvider>
+          <Header />
+          {children}
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );

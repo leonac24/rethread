@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { RouteOption, ScanResult } from '@/types/garment';
+import { OutcomeSection } from '@/components/outcome-section';
 
 function truncate(text: string, maxWords: number): string {
   const words = text.split(/\s+/);
@@ -600,6 +601,13 @@ export function ResultView({ id }: ResultViewProps) {
                 })}
               </div>
             </Card>
+
+            {/* ── Outcome Selection ────────────────────────────────── */}
+            <OutcomeSection
+              id={id}
+              cost={data.result.cost}
+              condition={data.result.garment.condition}
+            />
 
             {/* ── Raw OCR Text (receipt) ───────────────────────────── */}
             <div className="flex justify-center">
