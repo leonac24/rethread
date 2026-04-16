@@ -170,12 +170,17 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
           action?: OutcomeAction;
           result?: ScanResult;
           text?: string;
+          imageUrls?: string[];
         };
         if (!response.ok || !payload.result || typeof payload.text !== 'string') {
           throw new Error(payload.error ?? 'Result not found.');
         }
         if (isActive) {
-          setData({ text: payload.text, result: payload.result });
+          setData({
+            text: payload.text,
+            result: payload.result,
+            previews: payload.imageUrls?.length ? payload.imageUrls : undefined,
+          });
           if (payload.action) setSavedAction(payload.action);
         }
       } catch (caughtError) {

@@ -11,6 +11,7 @@ type SavedScan = {
   action: OutcomeAction;
   result: ScanResult;
   createdAt: number;
+  imageUrls?: string[];
 };
 
 type ClosetTile = {
@@ -19,7 +20,7 @@ type ClosetTile = {
   fiber: string;
   action: OutcomeAction;
   date: string;
-  img: string;
+  imageUrls: string[];
 };
 
 const ACTION_BADGE: Record<OutcomeAction, { label: string; color: string }> = {
@@ -58,7 +59,8 @@ function ActionBadge({ action }: { action: OutcomeAction }) {
   );
 }
 
-function ClosetItem({ id, label, fiber, action, date, img }: ClosetTile) {
+function ClosetItem({ id, label, fiber, action, date, imageUrls }: ClosetTile) {
+  const imgSrc = imageUrls[0] ?? '/images/garment.webp';
   return (
     <Link href={`/closet/${id}`} className="flex flex-col items-center w-full">
       {/* hanger on top */}
@@ -77,7 +79,7 @@ function ClosetItem({ id, label, fiber, action, date, img }: ClosetTile) {
       >
         <div className="absolute inset-0 flex items-center justify-center p-4">
           <Image
-            src={img}
+            src={imgSrc}
             alt={label}
             width={200}
             height={200}
@@ -246,7 +248,7 @@ export default function ProfilePage() {
       fiber: fiberStr,
       action: scan.action,
       date,
-      img: '/images/garment.webp',
+      imageUrls: scan.imageUrls ?? [],
     };
   });
 
