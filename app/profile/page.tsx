@@ -3,14 +3,29 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/lib/firebase/auth-context';
+import type { OutcomeAction } from '@/types/garment';
 
-const MOCK_SCANS = [
-  { id: '1', label: "Levi's 501 Jeans", fiber: '100% Cotton', score: 6, date: 'Apr 9', img: '/images/garment.webp' },
-  { id: '2', label: 'Patagonia Fleece', fiber: '100% Recycled Polyester', score: 8, date: 'Apr 7', img: '/images/garment.webp' },
-  { id: '3', label: 'H&M Basic Tee', fiber: '60% Cotton / 40% Polyester', score: 4, date: 'Apr 3', img: '/images/garment.webp' },
-  { id: '4', label: 'Zara Blazer', fiber: '80% Viscose / 20% Polyester', score: 3, date: 'Mar 28', img: '/images/garment.webp' },
-  { id: '5', label: 'Nike Hoodie', fiber: '80% Cotton / 20% Polyester', score: 5, date: 'Mar 20', img: '/images/garment.webp' },
+const MOCK_SCANS: {
+  id: string;
+  label: string;
+  fiber: string;
+  action: OutcomeAction;
+  date: string;
+  img: string;
+}[] = [
+  { id: '1', label: "Levi's 501 Jeans", fiber: '100% Cotton', action: 'repair', date: 'Apr 9', img: '/images/garment.webp' },
+  { id: '2', label: 'Patagonia Fleece', fiber: '100% Recycled Polyester', action: 'list', date: 'Apr 7', img: '/images/garment.webp' },
+  { id: '3', label: 'H&M Basic Tee', fiber: '60% Cotton / 40% Polyester', action: 'donate', date: 'Apr 3', img: '/images/garment.webp' },
+  { id: '4', label: 'Zara Blazer', fiber: '80% Viscose / 20% Polyester', action: 'throw_away', date: 'Mar 28', img: '/images/garment.webp' },
+  { id: '5', label: 'Nike Hoodie', fiber: '80% Cotton / 20% Polyester', action: 'repair', date: 'Mar 20', img: '/images/garment.webp' },
 ];
+
+const ACTION_BADGE: Record<OutcomeAction, { label: string; color: string }> = {
+  donate: { label: 'Donated', color: '#5E8B6C' },      // green — best
+  list: { label: 'Listed', color: '#C9983E' },         // lighter yellow
+  repair: { label: 'Repaired', color: '#8B6A1E' },     // darker yellow
+  throw_away: { label: 'Thrown Away', color: '#B23A2B' }, // red — worst
+};
 
 const TIERS = [
   { name: 'Thread Rookie', min: 0 },
@@ -28,28 +43,20 @@ function getTier(scans: number) {
   return tier;
 }
 
-function getNextTier(scans: number) {
-  for (let i = TIERS.length - 1; i >= 0; i--) {
-    if (scans < TIERS[i].min) return TIERS[i];
-  }
-  return null;
-}
-
-function ScoreDot({ score }: { score: number }) {
-  const color = score >= 7 ? '#3f5338' : score >= 4 ? '#b07d2e' : '#a83232';
-  const label = score >= 7 ? 'Good' : score >= 4 ? 'Fair' : 'Poor';
+function ActionBadge({ action }: { action: OutcomeAction }) {
+  const { label, color } = ACTION_BADGE[action];
   return (
     <span
       className="inline-flex items-center gap-1 text-[11px] font-bold"
       style={{ color }}
     >
       <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: color }} />
-      {score}/10 · {label}
+      {label}
     </span>
   );
 }
 
-function ClosetItem({ label, fiber, score, date, img }: (typeof MOCK_SCANS)[number]) {
+function ClosetItem({ label, fiber, action, date, img }: (typeof MOCK_SCANS)[number]) {
   return (
     <div className="flex flex-col items-center w-full">
       {/* hanger on top */}
@@ -82,7 +89,7 @@ function ClosetItem({ label, fiber, score, date, img }: (typeof MOCK_SCANS)[numb
         <p className="text-[13px] font-bold text-ink leading-tight truncate">{label}</p>
         <p className="text-[11px] text-ink-muted mt-0.5 leading-tight line-clamp-2">{fiber}</p>
         <div className="mt-1">
-          <ScoreDot score={score} />
+          <ActionBadge action={action} />
         </div>
         <p className="text-[10px] text-ink-faint mt-0.5 font-medium">{date}</p>
       </div>
@@ -134,16 +141,15 @@ function AddClosetTile() {
   );
 }
 
+// Ordered best → worst for the environment (top of badge = best)
+const ACTION_TIER_ORDER: OutcomeAction[] = ['donate', 'list', 'repair', 'throw_away'];
+
 function RankBadge({
   currentTier,
-  nextTier,
-  scanCount,
-  progressToNext,
+  counts,
 }: {
   currentTier: (typeof TIERS)[number];
-  nextTier: (typeof TIERS)[number] | null;
-  scanCount: number;
-  progressToNext: number;
+  counts: Record<OutcomeAction, number>;
 }) {
   return (
     <div className="relative w-full max-w-[145px] md:max-w-[185px]">
@@ -156,20 +162,23 @@ function RankBadge({
       />
       <div className="absolute inset-0 flex flex-col items-center justify-center pb-[6%]">
         <p className="text-[7px] md:text-[9px] font-bold tracking-[0.16em] uppercase text-ink-muted">Current Tier</p>
-        <p className="text-[12px] md:text-[16px] font-black text-ink leading-tight mt-0.5">{currentTier.name}</p>
-        {nextTier && (
-          <>
-            <div className="mt-1 md:mt-1.5 w-[55%] h-0.5 md:h-1 rounded-full bg-black/10">
-              <div
-                className="h-full rounded-full bg-accent-700"
-                style={{ width: `${progressToNext}%` }}
-              />
-            </div>
-            <p className="mt-0.5 md:mt-1 text-[7px] md:text-[8px] text-ink-muted font-medium">
-              {scanCount} / {nextTier.min} → {nextTier.name}
-            </p>
-          </>
-        )}
+        <p className="text-[11px] md:text-[14px] font-black text-ink leading-tight mt-0.5 mb-1.5 md:mb-2">{currentTier.name}</p>
+        <div className="flex flex-col items-start gap-0.5 md:gap-1">
+          {ACTION_TIER_ORDER.map((action) => {
+            const { label, color } = ACTION_BADGE[action];
+            return (
+              <div key={action} className="flex items-center gap-1.5">
+                <span
+                  className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full inline-block"
+                  style={{ background: color }}
+                />
+                <span className="text-[9px] md:text-[11px] font-bold text-ink leading-tight">
+                  {counts[action]} <span className="font-medium text-ink-muted">{label}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -180,10 +189,14 @@ export default function ProfilePage() {
 
   const scanCount = user?.actionCount ?? 12;
   const currentTier = getTier(scanCount);
-  const nextTier = getNextTier(scanCount);
-  const progressToNext = nextTier
-    ? ((scanCount - currentTier.min) / (nextTier.min - currentTier.min)) * 100
-    : 100;
+
+  const actionCounts = MOCK_SCANS.reduce<Record<OutcomeAction, number>>(
+    (acc, s) => {
+      acc[s.action] = (acc[s.action] ?? 0) + 1;
+      return acc;
+    },
+    { repair: 0, list: 0, donate: 0, throw_away: 0 },
+  );
 
   const co2Lbs = user ? ((user.totalCO2SavedKg ?? 0) * 2.205).toFixed(1) : '34';
   const waterGal = user ? Math.round((user.totalWaterSavedLiters ?? 0) * 0.264).toLocaleString() : '2,400';
@@ -253,12 +266,7 @@ export default function ProfilePage() {
             </div>
 
             <div className="flex justify-end md:justify-center">
-              <RankBadge
-                currentTier={currentTier}
-                nextTier={nextTier}
-                scanCount={scanCount}
-                progressToNext={progressToNext}
-              />
+              <RankBadge currentTier={currentTier} counts={actionCounts} />
             </div>
           </div>
         </div>

@@ -18,9 +18,14 @@ export function HeaderNav() {
     return (
       <a
         href="/login"
-        className="mr-5 text-[14px] font-medium text-ink border border-rule rounded-md px-4 py-1.5 hover:bg-surface transition-colors"
+        className="mr-5 w-8 h-8 rounded-full border border-rule flex items-center justify-center text-ink-muted hover:text-ink hover:bg-surface transition-colors cursor-pointer"
+        title="Sign in"
+        aria-label="Sign in"
       >
-        Sign in
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
       </a>
     );
   }
@@ -54,7 +59,7 @@ export function HeaderNav() {
           await signOut();
           router.push('/');
         }}
-        className="text-[13px] text-ink-faint hover:text-ink-muted transition-colors"
+        className="text-[13px] text-ink-faint hover:text-ink-muted transition-colors cursor-pointer"
         title="Sign out"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

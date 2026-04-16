@@ -77,6 +77,30 @@ type ActionMeta = {
 };
 
 const ACTION_META: Record<OutcomeAction, ActionMeta> = {
+  donate: {
+    bg: '#E8F0E6',
+    ringColor: '#5E8B6C',
+    iconColor: '#5E8B6C',
+    label: 'Donate',
+    sublabel: 'Give it away',
+    icon: <HeartIcon />,
+  },
+  list: {
+    bg: '#FBF1D4',
+    ringColor: '#C9983E',
+    iconColor: '#C9983E',
+    label: 'List / Swap',
+    sublabel: 'Sell or trade',
+    icon: <TagIcon />,
+  },
+  repair: {
+    bg: '#F2E4C7',
+    ringColor: '#8B6A1E',
+    iconColor: '#8B6A1E',
+    label: 'Repair',
+    sublabel: 'Extend its life',
+    icon: <WrenchIcon />,
+  },
   throw_away: {
     bg: '#FDECEA',
     ringColor: '#B23A2B',
@@ -85,38 +109,15 @@ const ACTION_META: Record<OutcomeAction, ActionMeta> = {
     sublabel: 'Sends to landfill',
     icon: <TrashIcon />,
   },
-  repair: {
-    bg: '#ECE8DF',
-    ringColor: '#5C6470',
-    iconColor: '#5C6470',
-    label: 'Repair',
-    sublabel: 'Extend its life',
-    icon: <WrenchIcon />,
-  },
-  list: {
-    bg: '#EAF4FB',
-    ringColor: '#2E5F83',
-    iconColor: '#2E5F83',
-    label: 'List / Swap',
-    sublabel: 'Sell or trade',
-    icon: <TagIcon />,
-  },
-  donate: {
-    bg: '#F5EEF8',
-    ringColor: '#8E6BAD',
-    iconColor: '#8E6BAD',
-    label: 'Donate',
-    sublabel: 'Give it away',
-    icon: <HeartIcon />,
-  },
 };
 
-const ACTION_ORDER: OutcomeAction[] = ['repair', 'list', 'donate', 'throw_away'];
+// Ordered best → worst for the environment (tier system)
+const ACTION_ORDER: OutcomeAction[] = ['donate', 'list', 'repair', 'throw_away'];
 
 function recommendedAction(condition?: GarmentCondition): OutcomeAction | null {
   if (!condition) return null;
   if (condition === 'poor' || condition === 'fair') return 'repair';
-  if (condition === 'good' || condition === 'excellent') return 'list';
+  if (condition === 'good' || condition === 'excellent') return 'donate';
   return null;
 }
 

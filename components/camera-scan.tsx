@@ -142,7 +142,7 @@ export function CameraScan() {
 
   return (
     <main className="min-h-[calc(100svh-120px)] bg-bg py-6 flex items-center justify-center">
-      <div className="w-[88%] max-w-[480px] mx-auto space-y-6 -translate-y-[15%]">
+      <div className="w-[88%] max-w-[480px] mx-auto space-y-6 -translate-y-[5%]">
 
         {/* ── Cards + buttons row ── */}
         <div className="grid grid-cols-2 gap-x-[32px] items-start">
@@ -165,12 +165,14 @@ export function CameraScan() {
                 />
               </div>
             </div>
-            {garmentPhoto && (
-              <div className="relative z-30 flex w-full items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 mt-2">
-                <span className="truncate text-[12px] text-ink">{garmentPhoto.name}</span>
-                <button type="button" onClick={() => setGarmentPhoto(null)} disabled={isLoading} className="ml-2 shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
-              </div>
-            )}
+            <div className="relative z-30 w-full mt-2 min-h-[36px]">
+              {garmentPhoto && (
+                <div className="flex w-full items-center justify-between rounded-md border border-rule bg-bg px-3 py-2">
+                  <span className="truncate text-[12px] text-ink">{garmentPhoto.name}</span>
+                  <button type="button" onClick={() => setGarmentPhoto(null)} disabled={isLoading} className="ml-2 shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Tags */}
@@ -193,36 +195,38 @@ export function CameraScan() {
                 />
               </div>
             </div>
-            {staged.length === 1 && (
-              <div className="relative z-30 flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 mt-2">
-                <span className="truncate text-[12px] text-ink">{staged[0].name}</span>
-                <button type="button" onClick={() => removeStaged(0)} disabled={isLoading} className="ml-2 shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
-              </div>
-            )}
-            {staged.length > 1 && (
-              <div className="relative z-30 mt-2 w-full">
-                <button
-                  type="button"
-                  onClick={() => setStagedListOpen((v) => !v)}
-                  className="flex w-full items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 text-[12px] text-ink cursor-pointer"
-                >
-                  <span>{staged.length} tags uploaded</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-ink-muted transition-transform ${stagedListOpen ? 'rotate-180' : ''}`}>
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-                {stagedListOpen && (
-                  <div className="mt-1 rounded-md border border-rule bg-bg overflow-hidden">
-                    {staged.map((file, i) => (
-                      <div key={i} className="flex items-center justify-between px-3 py-2 border-b border-rule last:border-b-0">
-                        <span className="truncate text-[12px] text-ink">{file.name}</span>
-                        <button type="button" onClick={() => removeStaged(i)} disabled={isLoading} className="ml-2 shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="relative z-30 w-full mt-2 min-h-[36px]">
+              {staged.length === 1 && (
+                <div className="flex items-center justify-between rounded-md border border-rule bg-bg px-3 py-2">
+                  <span className="truncate text-[12px] text-ink">{staged[0].name}</span>
+                  <button type="button" onClick={() => removeStaged(0)} disabled={isLoading} className="ml-2 shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
+                </div>
+              )}
+              {staged.length > 1 && (
+                <div className="w-full">
+                  <button
+                    type="button"
+                    onClick={() => setStagedListOpen((v) => !v)}
+                    className="flex w-full items-center justify-between rounded-md border border-rule bg-bg px-3 py-2 text-[12px] text-ink cursor-pointer"
+                  >
+                    <span>{staged.length} tags uploaded</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-ink-muted transition-transform ${stagedListOpen ? 'rotate-180' : ''}`}>
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {stagedListOpen && (
+                    <div className="mt-1 rounded-md border border-rule bg-bg overflow-hidden">
+                      {staged.map((file, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2 border-b border-rule last:border-b-0">
+                          <span className="truncate text-[12px] text-ink">{file.name}</span>
+                          <button type="button" onClick={() => removeStaged(i)} disabled={isLoading} className="ml-2 shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-[14px] text-ink-muted hover:text-danger hover:bg-danger/10 disabled:opacity-40 cursor-pointer">&times;</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
