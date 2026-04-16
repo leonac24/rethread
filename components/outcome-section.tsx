@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useAuth } from '@/lib/firebase/auth-context';
 import type { EnvironmentalCost, GarmentCondition, OutcomeAction } from '@/types/garment';
 
 type Status = 'idle' | 'confirming' | 'loading' | 'done' | 'conflict' | 'error';
@@ -124,6 +125,7 @@ function recommendedAction(condition?: GarmentCondition): OutcomeAction | null {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
+  const { firebaseUser } = useAuth();
   const [status, setStatus] = useState<Status>('idle');
   const [pendingAction, setPendingAction] = useState<OutcomeAction | null>(null);
   const [doneAction, setDoneAction] = useState<OutcomeAction | null>(null);
@@ -137,9 +139,14 @@ export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
     setErrorMsg(null);
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (firebaseUser) {
+        const token = await firebaseUser.getIdToken();
+        headers.Authorization = `Bearer ${token}`;
+      }
       const res = await fetch(`/api/scan/${id}/outcome`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ action }),
       });
 
