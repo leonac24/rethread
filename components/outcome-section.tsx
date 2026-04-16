@@ -309,7 +309,7 @@ export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
               key={action}
               onClick={() => handleCardTap(action)}
               disabled={isLoading}
-              className="relative flex flex-col items-center justify-center gap-2 rounded-xl px-3 py-4 text-center transition-all duration-150 active:scale-95 disabled:cursor-default"
+              className="relative flex flex-col items-center justify-center gap-2 rounded-xl px-3 py-4 text-center transition-all duration-150 cursor-pointer active:scale-95 disabled:cursor-default"
               style={{
                 backgroundColor: meta.bg,
                 opacity: isFaded ? 0.4 : 1,
