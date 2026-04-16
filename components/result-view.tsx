@@ -2,16 +2,13 @@
 
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
 import {
   PieChart,
   Pie,
   Cell,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
 } from 'recharts';
 import type { RouteOption, ScanResult } from '@/types/garment';
 import { OutcomeSection } from '@/components/outcome-section';
@@ -22,37 +19,9 @@ function truncate(text: string, maxWords: number): string {
   return words.slice(0, maxWords).join(' ') + '...';
 }
 
-const COUNTRY_COORDS: Record<string, [number, number]> = {
-  'usa': [38, -97], 'united states': [38, -97], 'us': [38, -97], 'america': [38, -97],
-  'china': [35, 105], 'bangladesh': [23.7, 90.4], 'india': [20, 77],
-  'vietnam': [14, 108], 'cambodia': [12.5, 104.9], 'indonesia': [-0.8, 113.9],
-  'pakistan': [30, 70], 'turkey': [38.9, 35.2], 'mexico': [23.6, -102.5],
-  'sri lanka': [7.9, 80.8], 'ethiopia': [9.1, 40.5], 'portugal': [39.4, -8.2],
-  'italy': [41.9, 12.6], 'france': [46.2, 2.2], 'germany': [51.2, 10.4],
-  'uk': [51.5, -0.1], 'united kingdom': [51.5, -0.1], 'japan': [36.2, 138.3],
-  'south korea': [35.9, 127.8], 'korea': [35.9, 127.8], 'taiwan': [23.7, 121],
-  'thailand': [15.9, 100.9], 'malaysia': [4.2, 108], 'myanmar': [19.2, 96.7],
-  'morocco': [31.8, -7.1], 'peru': [-9.2, -75], 'brazil': [-14.2, -51.9],
-  'colombia': [4.6, -74.1], 'honduras': [15.2, -86.2], 'guatemala': [15.8, -90.2],
-  'el salvador': [13.8, -88.9], 'haiti': [18.9, -72.3], 'egypt': [26, 30],
-  'philippines': [12.9, 121.8], 'nepal': [28.4, 84.1],
-};
-
-function countryMapSrcdoc(country: string): string | null {
-  const coords = COUNTRY_COORDS[country.toLowerCase().trim()];
-  if (!coords) return null;
-  const [lat, lng] = coords;
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
-<style>html,body{margin:0;height:100%}#m{height:100%}.leaflet-control-attribution,.leaflet-control-zoom{display:none!important}</style>
-</head><body><div id="m"></div><script>
-var m=L.map('m',{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,tap:false,touchZoom:false}).setView([${lat},${lng}],2);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',{subdomains:'abcd'}).addTo(m);
-var icon=L.icon({iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',iconRetinaUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',shadowUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',iconSize:[18,30],iconAnchor:[9,30],shadowSize:[30,30]});
-L.marker([${lat},${lng}],{icon:icon}).addTo(m);
-<\/script></body></html>`;
+function truncateChars(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars - 1).trimEnd() + '…';
 }
 
 function mapsUrl(route: RouteOption): string {
@@ -158,6 +127,16 @@ export function ResultView({ id }: ResultViewProps) {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setLightboxSrc(null);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [lightboxSrc]);
 
   useEffect(() => {
     let isActive = true;
@@ -205,7 +184,16 @@ export function ResultView({ id }: ResultViewProps) {
   const fiberData = data?.result.garment.fibers.map((f) => ({ name: f.material, value: f.percentage })) ?? [];
 
   return (
-    <main className="min-h-screen bg-bg md:pt-[80px]">
+    <main className="min-h-screen bg-bg">
+      {/* Shared torn-edge filter — used by fiber donut and dye bar */}
+      <svg width="0" height="0" aria-hidden className="absolute">
+        <defs>
+          <filter id="torn-edge" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="7" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" />
+          </filter>
+        </defs>
+      </svg>
       <div className="pb-10 pt-2 space-y-3 content-width">
 
         {/* Loading / Error */}
@@ -218,7 +206,14 @@ export function ResultView({ id }: ResultViewProps) {
 
         {data && (
           <>
-            {/* ── Garment Hero ─────────────────────────────────────── */}
+            {/* ── Garment Hero + Fiber Composition row ─────────────── */}
+            <div
+              className={
+                fiberData.length > 0
+                  ? 'space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-stretch'
+                  : ''
+              }
+            >
             <Card className="relative overflow-hidden">
               {/* Watermark category text */}
               {data.result.garment.category && (
@@ -234,14 +229,42 @@ export function ResultView({ id }: ResultViewProps) {
 
               <SectionLabel>Garment</SectionLabel>
 
-              <div className="flex flex-wrap sm:flex-nowrap gap-4 items-start relative z-10">
-                {/* Polaroid frame with photo */}
+              <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start relative z-10">
+                {/* Polaroid frame with photo + tag thumbnails in caption area */}
                 {data.previews?.length ? (
                   <div className="flex-shrink-0 relative w-[200px]" style={{ transform: 'rotate(-3deg)' }}>
-                    <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '8%', paddingBottom: '28%', paddingLeft: '10%', paddingRight: '10%' }}>
-                      <img src={data.previews[0]} alt="Garment" className="w-full h-full object-cover" />
-                    </div>
-                    <Image src="/images/frame.png" alt="" width={300} height={350} className="relative z-10 w-full h-auto" />
+                    <button
+                      type="button"
+                      onClick={() => setLightboxSrc(data.previews![0])}
+                      className="absolute inset-0 flex items-center justify-center cursor-zoom-in"
+                      style={{ paddingTop: '8%', paddingBottom: '28%', paddingLeft: '10%', paddingRight: '10%' }}
+                      aria-label="Expand garment photo"
+                    >
+                      <img src={data.previews[0]} alt="Garment" className="w-full h-full object-cover pointer-events-none" />
+                    </button>
+                    <Image src="/images/frame.webp" alt="" width={300} height={350} className="relative z-10 w-full h-auto pointer-events-none" />
+                    {data.previews.length > 1 && (
+                      <div
+                        className="absolute left-0 right-0 z-20 flex justify-center gap-1.5"
+                        style={{ bottom: '7%', paddingLeft: '12%', paddingRight: '12%' }}
+                      >
+                        {data.previews.slice(1, 4).map((src, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setLightboxSrc(src)}
+                            className="cursor-zoom-in"
+                            aria-label={`Expand tag photo ${i + 1}`}
+                          >
+                            <img
+                              src={src}
+                              alt={`Tag ${i + 1}`}
+                              className="w-[38px] h-[38px] object-cover rounded-[2px] border border-ink/15 pointer-events-none"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : null}
 
@@ -305,51 +328,53 @@ export function ResultView({ id }: ResultViewProps) {
                   )}
 
                   {data.result.garment.origin && (
-                    <>
-                      <div className="flex items-center gap-2 mt-2">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint flex-shrink-0">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                        </svg>
-                        <p className="text-[15px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
-                      </div>
-                      {countryMapSrcdoc(data.result.garment.origin) && (
-                        <iframe
-                          srcDoc={countryMapSrcdoc(data.result.garment.origin)!}
-                          sandbox="allow-scripts"
-                          className="w-full mt-3 rounded-lg border-0 pointer-events-none"
-                          style={{ height: 100 }}
-                          loading="lazy"
-                          title={`Map of ${data.result.garment.origin}`}
-                        />
-                      )}
-                    </>
-                  )}
-
-                  {/* Secondary images — mobile: under details */}
-                  {data.previews && data.previews.length > 1 && (
-                    <div className="grid grid-cols-2 gap-2 mt-3 w-fit sm:hidden">
-                      {data.previews.slice(1).map((src, i) => (
-                        <img key={i} src={src} alt={`Tag ${i + 1}`} className="w-[56px] h-[56px] rounded-lg object-cover border border-rule" />
-                      ))}
+                    <div className="flex items-center gap-2 mt-2">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint flex-shrink-0">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                      </svg>
+                      <p className="text-[15px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
                     </div>
                   )}
-                </div>
 
-                {/* Secondary images — desktop: far right stacked */}
-                {data.previews && data.previews.length > 1 && (
-                  <div className="hidden sm:flex flex-col gap-2 flex-shrink-0">
-                    {data.previews.slice(1).map((src, i) => (
-                      <img key={i} src={src} alt={`Tag ${i + 1}`} className="w-[56px] h-[56px] rounded-lg object-cover border border-rule" />
-                    ))}
-                  </div>
-                )}
+                </div>
               </div>
             </Card>
 
             {/* ── Fiber Composition ───────────────────────────────── */}
             {fiberData.length > 0 && (
-              <Card style={{ backgroundImage: 'url(/images/burlap.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: 'none', backgroundColor: 'transparent' }}>
+              <motion.div
+                initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+              >
+              <Card style={{ backgroundImage: 'url(/images/burlap.webp)', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: 'none', backgroundColor: 'transparent' }}>
                 <SectionLabel><span className="text-ink bg-white px-1">Fiber Composition</span></SectionLabel>
+
+                {/* SVG defs — crumpled-paper pattern tinted per fiber color */}
+                <svg width="0" height="0" aria-hidden className="absolute">
+                  <defs>
+                    {FIBER_COLORS.map((color, i) => (
+                      <pattern
+                        key={i}
+                        id={`fiber-paper-${i}`}
+                        patternUnits="userSpaceOnUse"
+                        width="420"
+                        height="420"
+                      >
+                        <rect width="420" height="420" fill={color} />
+                        <image
+                          href="/images/paperbar.webp"
+                          width="420"
+                          height="420"
+                          preserveAspectRatio="xMidYMid slice"
+                          style={{ mixBlendMode: 'luminosity', filter: 'brightness(0.82) contrast(1.1)' }}
+                        />
+                      </pattern>
+                    ))}
+                  </defs>
+                </svg>
+
                 <div style={{ height: 180 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -365,7 +390,12 @@ export function ResultView({ id }: ResultViewProps) {
                         endAngle={-270}
                       >
                         {fiberData.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={FIBER_COLORS[index % FIBER_COLORS.length]} />
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={`url(#fiber-paper-${index % FIBER_COLORS.length})`}
+                            stroke="none"
+                            filter="url(#torn-edge)"
+                          />
                         ))}
                       </Pie>
                       <Tooltip
@@ -399,55 +429,77 @@ export function ResultView({ id }: ResultViewProps) {
                   ))}
                 </div>
               </Card>
+              </motion.div>
             )}
+            </div>
 
             {/* ── Environmental Impact ─────────────────────────────── */}
             <Card>
               <SectionLabel>Environmental Impact</SectionLabel>
 
               {/* Water + CO2 ripped paper cards */}
-              <div className="grid grid-cols-2 gap-[34px] mb-4">
-                <div
-                  className="p-6 text-center"
-                  style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(-1.5deg)' }}
+              <div className="grid grid-cols-2 gap-[34px] mb-1 md:mb-4">
+                <motion.div
+                  className="text-center md:p-6 md:bg-[url(/images/tape.webp)] md:bg-cover md:bg-center"
+                  initial={{ opacity: 0, y: -24, rotate: -14 }}
+                  whileInView={{ opacity: 1, y: 0, rotate: -1.5 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ type: 'spring', stiffness: 180, damping: 14, delay: 0.05 }}
                 >
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
-                  <p className="text-[26px] font-bold text-ink leading-none">
-                    {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
-                  </p>
-                  <p className="text-[10px] text-ink font-medium mt-1">gallons</p>
-                  <p className="text-[9px] text-ink-muted mt-2 leading-tight">
+                  <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.webp)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">Water</p>
+                    <p className="text-[26px] font-bold text-ink leading-none">
+                      {Math.round(data.result.cost.water_liters * 0.264172).toLocaleString()}
+                    </p>
+                    <p className="text-[10px] text-ink font-medium mt-1">gallons</p>
+                  </div>
+                  <p className="text-[9px] text-ink-muted mt-2 pb-4 md:pb-0 leading-tight">
                     est. based on <a href="https://waterfootprint.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">WaterFootprint.org</a><br/>per-fiber LCA data
                   </p>
-                </div>
-                <div
-                  className="p-6 text-center"
-                  style={{ backgroundImage: 'url(/images/tape.png)', backgroundSize: 'cover', backgroundPosition: 'center', transform: 'rotate(1.2deg)' }}
+                </motion.div>
+                <motion.div
+                  className="text-center md:p-6 md:bg-[url(/images/tape.webp)] md:bg-cover md:bg-center"
+                  initial={{ opacity: 0, y: -24, rotate: 14 }}
+                  whileInView={{ opacity: 1, y: 0, rotate: 1.2 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ type: 'spring', stiffness: 180, damping: 14, delay: 0.18 }}
                 >
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
-                  <p className="text-[26px] font-bold text-ink leading-none">
-                    {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
-                  </p>
-                  <p className="text-[10px] text-ink font-medium mt-1">pounds</p>
-                  <p className="text-[9px] text-ink-muted mt-2 leading-tight">
+                  <div className="py-5 px-6 flex flex-col items-center justify-center bg-[url(/images/tape.webp)] bg-[length:auto_250%] bg-no-repeat bg-[position:center_55%] md:py-0 md:px-0 md:block md:bg-none">
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink font-semibold mb-1">CO₂</p>
+                    <p className="text-[26px] font-bold text-ink leading-none">
+                      {(data.result.cost.co2_kg * 2.20462).toFixed(1)}
+                    </p>
+                    <p className="text-[10px] text-ink font-medium mt-1">pounds</p>
+                  </div>
+                  <p className="text-[9px] text-ink-muted mt-2 pb-4 md:pb-0 leading-tight">
                     est. based on <a href="https://textileexchange.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">Textile Exchange</a><br/>per-fiber LCA data
                   </p>
-                </div>
+                </motion.div>
               </div>
 
-              {/* Dye risk bar chart */}
+              {/* Dye risk bar — crumpled-paper fill tinted by dye color */}
               <div className="rounded-xl bg-bg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[14px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Dye Risk</p>
                   <span className="text-[15px] font-bold" style={{ color: dyeColor }}>{dyeScore}/10</span>
                 </div>
-                <ResponsiveContainer width="100%" height={52}>
-                  <BarChart data={[{ value: dyeScore }]} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                    <XAxis type="number" domain={[0, 10]} hide />
-                    <YAxis type="category" dataKey="value" hide />
-                    <Bar dataKey="value" fill={dyeColor} radius={4} background={{ fill: 'rgba(20,22,26,0.07)', radius: 4 }} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="relative w-full h-[28px] bg-ink/[0.07] rounded-md">
+                  <motion.div
+                    className="absolute top-[-5px] bottom-[-5px] left-0"
+                    initial={{ width: '0%' }}
+                    whileInView={{ width: `${Math.max(0, Math.min(10, dyeScore)) * 10}%` }}
+                    viewport={{ once: true, amount: 0.5 }}
+                    transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+                    style={{
+                      backgroundColor: dyeColor,
+                      backgroundImage: 'url(/images/paperbar.webp)',
+                      backgroundSize: '520px',
+                      backgroundPosition: 'center',
+                      backgroundBlendMode: 'luminosity',
+                      filter: 'url(#torn-edge) brightness(0.82) contrast(1.1)',
+                    }}
+                  />
+                </div>
                 {data.result.cost.dye_type && (
                   <p className="text-[14px] font-medium text-ink mt-2">{data.result.cost.dye_type}</p>
                 )}
@@ -466,29 +518,28 @@ export function ResultView({ id }: ResultViewProps) {
             {data.result.landfill_impact && (() => {
               const li = data.result.landfill_impact!;
               const items: { key: string; label: string; body: string }[] = [
-                { key: 'microplastics', label: 'Microplastics', body: li.microplastics },
-                { key: 'methane', label: 'Methane', body: li.methane },
-                { key: 'dye_runoff', label: 'Dye Runoff', body: li.dye_runoff },
-                { key: 'breakdown', label: 'Breakdown Time', body: li.breakdown_years },
+                { key: 'microplastics', label: 'Microplastics', body: truncateChars(li.microplastics, 100) },
+                { key: 'methane', label: 'Methane', body: truncateChars(li.methane, 100) },
+                { key: 'dye_runoff', label: 'Dye Runoff', body: truncateChars(li.dye_runoff, 100) },
+                { key: 'breakdown', label: 'Breakdown Time', body: truncateChars(li.breakdown_years, 100) },
               ];
               return (
                 <Card>
                   <SectionLabel>What happens if you throw it in the trash</SectionLabel>
                   <p className="text-[15px] leading-[20px] text-ink mb-4">{li.summary}</p>
                   <div className="grid grid-cols-1 gap-2">
-                    {items.map((item) => (
-                      <div
+                    {items.map((item, i) => (
+                      <motion.div
                         key={item.key}
-                        className="px-5 py-3"
-                        style={{
-                          backgroundImage: 'url(/images/ribbon.png)',
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }}
+                        className="px-5 py-[15px] md:py-3 bg-[url(/images/ribbon.webp)] bg-[length:auto_137.5%] bg-no-repeat bg-center md:bg-cover"
+                        initial={{ opacity: 0, x: -28 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true, amount: 0.3 }}
+                        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.05 + i * 0.09 }}
                       >
                         <p className="text-[14px] font-bold uppercase tracking-[0.08em] text-ink mb-0.5">{item.label}</p>
                         <p className="text-[14px] leading-[18px] text-ink">{item.body}</p>
-                      </div>
+                      </motion.div>
                     ))}
                   </div>
                 </Card>
@@ -562,7 +613,7 @@ export function ResultView({ id }: ResultViewProps) {
             <div className="flex justify-center">
             <div
               className="overflow-hidden w-64"
-              style={{ backgroundImage: 'url(/images/receipt.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+              style={{ backgroundImage: 'url(/images/receipt.webp)', backgroundSize: 'cover', backgroundPosition: 'center' }}
             >
               <button
                 onClick={() => setOcrOpen((v) => !v)}
@@ -592,6 +643,34 @@ export function ResultView({ id }: ResultViewProps) {
           </>
         )}
       </div>
+
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setLightboxSrc(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded image"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxSrc}
+            alt="Expanded view"
+            className="max-w-full max-h-full object-contain"
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxSrc(null);
+            }}
+            aria-label="Close expanded view"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/15 backdrop-blur-md text-white text-[22px] leading-none flex items-center justify-center hover:bg-white/25 cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </main>
   );
 }

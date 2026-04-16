@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { Fraunces, Inter, JetBrains_Mono, Architects_Daughter } from 'next/font/google';
+import Header from '@/components/header';
+import Footer from '@/components/footer';
 import './globals.css';
 import { AuthProvider } from '@/lib/firebase/auth-context';
-import Header from '@/components/header';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -48,6 +49,7 @@ export default function RootLayout({
         <AuthProvider>
           <Header />
           {children}
+          <Footer />
         </AuthProvider>
       </body>
     </html>

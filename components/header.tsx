@@ -2,33 +2,22 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { HeaderNav } from '@/components/header-nav';
 
 export default function Header() {
-  const pathname = usePathname();
-  const isHome = pathname === '/';
-
   return (
-    <header className="relative z-20 pt-4 pb-2 md:pb-0">
-      <div className="content-width grid grid-cols-3 items-center">
-        <div aria-hidden />
-        <Link
-          href="/"
-          aria-label="Rethread home"
-          className={`justify-self-center ${isHome ? 'md:translate-y-[140px]' : ''}`}
-        >
+    <header className="relative z-20 pt-2">
+      <div className="content-width flex items-center justify-between">
+        <Link href="/" aria-label="Rethread home">
           <Image
             src="/images/hero.webp"
             alt="Rethread"
             width={100}
             height={100}
-            className="w-[100px] h-auto object-contain"
+            className="w-[60px] h-auto object-contain"
           />
         </Link>
-        <div className="justify-self-end">
-          <HeaderNav />
-        </div>
+        <HeaderNav />
       </div>
     </header>
   );

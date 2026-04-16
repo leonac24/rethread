@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/firebase/auth-context';
 
 const MOCK_SCANS = [
-  { id: '1', label: "Levi's 501 Jeans", fiber: '100% Cotton', score: 6, date: 'Apr 9', img: '/images/garment.png' },
-  { id: '2', label: 'Patagonia Fleece', fiber: '100% Recycled Polyester', score: 8, date: 'Apr 7', img: '/images/garment.png' },
-  { id: '3', label: 'H&M Basic Tee', fiber: '60% Cotton / 40% Polyester', score: 4, date: 'Apr 3', img: '/images/garment.png' },
-  { id: '4', label: 'Zara Blazer', fiber: '80% Viscose / 20% Polyester', score: 3, date: 'Mar 28', img: '/images/garment.png' },
-  { id: '5', label: 'Nike Hoodie', fiber: '80% Cotton / 20% Polyester', score: 5, date: 'Mar 20', img: '/images/garment.png' },
+  { id: '1', label: "Levi's 501 Jeans", fiber: '100% Cotton', score: 6, date: 'Apr 9', img: '/images/garment.webp' },
+  { id: '2', label: 'Patagonia Fleece', fiber: '100% Recycled Polyester', score: 8, date: 'Apr 7', img: '/images/garment.webp' },
+  { id: '3', label: 'H&M Basic Tee', fiber: '60% Cotton / 40% Polyester', score: 4, date: 'Apr 3', img: '/images/garment.webp' },
+  { id: '4', label: 'Zara Blazer', fiber: '80% Viscose / 20% Polyester', score: 3, date: 'Mar 28', img: '/images/garment.webp' },
+  { id: '5', label: 'Nike Hoodie', fiber: '80% Cotton / 20% Polyester', score: 5, date: 'Mar 20', img: '/images/garment.webp' },
 ];
 
 const TIERS = [
@@ -54,7 +54,7 @@ function ClosetItem({ label, fiber, score, date, img }: (typeof MOCK_SCANS)[numb
     <div className="flex flex-col items-center w-full">
       {/* hanger on top */}
       <Image
-        src="/images/hanger.png"
+        src="/images/hanger.webp"
         alt=""
         width={140}
         height={80}
@@ -99,7 +99,7 @@ function AddClosetTile() {
     >
       {/* hanger on top — matches ClosetItem structure exactly */}
       <Image
-        src="/images/hanger.png"
+        src="/images/hanger.webp"
         alt=""
         width={140}
         height={80}
@@ -148,7 +148,7 @@ function RankBadge({
   return (
     <div className="relative w-full max-w-[145px] md:max-w-[185px]">
       <Image
-        src="/images/rankingframe.png"
+        src="/images/rankingframe.webp"
         alt="Ranking frame"
         width={332}
         height={330}
@@ -267,7 +267,7 @@ export default function ProfilePage() {
         <div
           className="grid grid-cols-2 gap-3 rounded-2xl overflow-hidden p-3"
           style={{
-            backgroundImage: 'url(/images/lace.jpg)',
+            backgroundImage: 'url(/images/lace.webp)',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
           }}
