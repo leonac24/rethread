@@ -191,7 +191,8 @@ export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
 
       setDoneAction(action);
       setStatus('done');
-    } catch {
+    } catch (err) {
+      console.error('[outcome-section] submit failed', err);
       setErrorMsg('Network error — please check your connection and try again.');
       setStatus('error');
     }
