@@ -1,6 +1,8 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -136,6 +138,7 @@ const SAVED_ACTION_META: Record<OutcomeAction, { label: string; color: string; s
 
 export function ResultView({ id, readOnly = false }: ResultViewProps) {
   const { firebaseUser, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [data, setData] = useState<{
     text: string;
     result: ScanResult;
@@ -145,6 +148,30 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!firebaseUser) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/user/scans/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? 'Failed to delete.');
+      }
+      router.push('/profile');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete.');
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     if (!lightboxSrc) return;
@@ -693,7 +720,68 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                 id={id}
                 cost={data.result.cost}
                 condition={data.result.garment.condition}
+                onOutcomeRecorded={setSavedAction}
               />
+            )}
+
+            {/* ── Back / Remove from Closet ────────────────────────── */}
+            {firebaseUser && savedAction && (
+              <div className="pt-2">
+                {!confirmingDelete ? (
+                  <div className="flex items-center justify-center gap-6">
+                    <Link
+                      href="/profile"
+                      className="text-[13px] font-semibold text-ink-muted underline underline-offset-2 hover:opacity-80"
+                    >
+                      Back to Closet
+                    </Link>
+                    {savedAction !== 'throw_away' && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingDelete(true)}
+                        className="text-[13px] font-semibold text-danger underline underline-offset-2 hover:opacity-80 cursor-pointer"
+                      >
+                        Remove from Closet
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className="rounded-2xl p-5 bg-surface"
+                    style={{ boxShadow: '0 2px 16px rgba(20,22,26,0.07)' }}
+                  >
+                    <p className="text-[15px] font-semibold text-ink mb-1">
+                      Remove this garment from your Closet?
+                    </p>
+                    <p className="text-[14px] text-ink-muted mb-4">
+                      Your environmental credit for this item will be reversed and the scan will be deleted.
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmingDelete(false);
+                          setDeleteError(null);
+                        }}
+                        disabled={deleting}
+                        className="flex-1 rounded-xl py-3 text-[15px] font-semibold text-ink-muted border border-rule transition-colors hover:bg-surface-sunk disabled:opacity-50 cursor-pointer disabled:cursor-default"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="flex-1 rounded-xl py-3 text-[15px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer disabled:cursor-default"
+                        style={{ backgroundColor: '#B23A2B' }}
+                      >
+                        {deleting ? 'Removing…' : 'Remove'}
+                      </button>
+                    </div>
+                    {deleteError && <p className="text-[13px] text-danger mt-3">{deleteError}</p>}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* ── Raw OCR Text (receipt) ───────────────────────────── */}

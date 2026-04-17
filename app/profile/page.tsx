@@ -167,7 +167,7 @@ function AddClosetTile() {
 }
 
 // Ordered best → worst for the environment (top of badge = best)
-const ACTION_TIER_ORDER: OutcomeAction[] = ['donate', 'list', 'repair', 'throw_away'];
+const ACTION_TIER_ORDER: OutcomeAction[] = ['donate', 'list', 'repair'];
 
 function RankBadge({
   currentTier,

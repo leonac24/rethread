@@ -11,6 +11,7 @@ type OutcomeSectionProps = {
   id: string;
   cost: EnvironmentalCost;
   condition?: GarmentCondition;
+  onOutcomeRecorded?: (action: OutcomeAction) => void;
 };
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ function recommendedAction(condition?: GarmentCondition): OutcomeAction | null {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
+export function OutcomeSection({ id, cost, condition, onOutcomeRecorded }: OutcomeSectionProps) {
   const { firebaseUser } = useAuth();
   const [status, setStatus] = useState<Status>('idle');
   const [pendingAction, setPendingAction] = useState<OutcomeAction | null>(null);
@@ -191,6 +192,7 @@ export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
 
       setDoneAction(action);
       setStatus('done');
+      onOutcomeRecorded?.(action);
     } catch (err) {
       console.error('[outcome-section] submit failed', err);
       setErrorMsg('Network error — please check your connection and try again.');
