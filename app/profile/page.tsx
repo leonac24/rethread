@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/lib/firebase/auth-context';
+import { LoadingScreen } from '@/components/loading-screen';
 import type { OutcomeAction, ScanResult } from '@/types/garment';
 
 type SavedScan = {
@@ -309,11 +310,7 @@ export default function ProfilePage() {
   ];
 
   if (loading) {
-    return (
-      <main className="min-h-screen bg-bg flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-ink-faint border-t-ink animate-spin" />
-      </main>
-    );
+    return <LoadingScreen blurbs={['Loading your closet', 'Fetching your impact']} />;
   }
 
   if (!user) {
@@ -328,6 +325,10 @@ export default function ProfilePage() {
         </a>
       </main>
     );
+  }
+
+  if (scans === null) {
+    return <LoadingScreen blurbs={['Loading your closet', 'Fetching your impact']} />;
   }
 
   return (
@@ -407,9 +408,6 @@ export default function ProfilePage() {
               />
             ))}
           </div>
-          {scans === null && (
-            <p className="text-[11px] text-ink-faint mt-4">Loading your closet…</p>
-          )}
         </div>
 
       </div>

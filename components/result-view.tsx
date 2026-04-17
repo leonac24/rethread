@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import type { OutcomeAction, RouteOption, ScanResult } from '@/types/garment';
 import { OutcomeSection } from '@/components/outcome-section';
+import { LoadingScreen } from '@/components/loading-screen';
 import { useAuth } from '@/lib/firebase/auth-context';
 
 function truncate(text: string, maxWords: number): string {
@@ -239,6 +240,10 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
   const dyeColor = dyeScore <= 3 ? '#5E8B6C' : dyeScore <= 6 ? '#C8A24A' : '#B23A2B';
   const fiberData = data?.result.garment.fibers.map((f) => ({ name: f.material, value: f.percentage })) ?? [];
 
+  if (!data && !error) {
+    return <LoadingScreen blurbs={['Retrieving garment details', 'Loading your scan']} />;
+  }
+
   return (
     <main className="min-h-screen bg-bg">
       {/* Shared torn-edge filter — used by fiber donut and dye bar */}
@@ -252,10 +257,6 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
       </svg>
       <div className="pb-10 pt-2 space-y-3 content-width">
 
-        {/* Loading / Error */}
-        {!data && !error && (
-          <p className="text-center text-[16px] text-ink-muted py-5">Loading result...</p>
-        )}
         {error && (
           <p className="text-center text-[16px] text-danger py-5">{error}</p>
         )}
