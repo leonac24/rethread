@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { ResultView } from '@/components/result-view';
@@ -44,13 +45,19 @@ export default function ClosetDetailPage({
       {firebaseUser && (
       <div className="content-width pb-10 -mt-3">
         {!confirming ? (
-          <div className="flex justify-center">
+          <div className="flex items-center justify-center gap-6">
+            <Link
+              href="/profile"
+              className="text-[13px] font-semibold text-ink-muted underline underline-offset-2 hover:opacity-80"
+            >
+              Back to Closet
+            </Link>
             <button
               type="button"
               onClick={() => setConfirming(true)}
               className="text-[13px] font-semibold text-danger underline underline-offset-2 hover:opacity-80 cursor-pointer"
             >
-              Remove from closet
+              Remove from Closet
             </button>
           </div>
         ) : (

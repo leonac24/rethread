@@ -59,7 +59,15 @@ function ActionBadge({ action }: { action: OutcomeAction }) {
   );
 }
 
-function ClosetItem({ id, label, fiber, action, date, imageUrls }: ClosetTile) {
+function ClosetItem({
+  id,
+  label,
+  fiber,
+  action,
+  date,
+  imageUrls,
+  onRequestDelete,
+}: ClosetTile & { onRequestDelete: () => void }) {
   const imgSrc = imageUrls[0] ?? '/images/garment.webp';
   return (
     <Link href={`/closet/${id}`} className="flex flex-col items-center w-full">
@@ -86,6 +94,18 @@ function ClosetItem({ id, label, fiber, action, date, imageUrls }: ClosetTile) {
             className="w-full h-full object-contain"
           />
         </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onRequestDelete();
+          }}
+          aria-label={`Remove ${label} from closet`}
+          className="absolute top-1.5 right-1.5 z-20 w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-[16px] leading-none text-ink-muted hover:text-danger cursor-pointer transition-colors"
+        >
+          ×
+        </button>
       </div>
 
       {/* metadata below */}
@@ -191,6 +211,32 @@ function RankBadge({
 export default function ProfilePage() {
   const { user, firebaseUser, loading } = useAuth();
   const [scans, setScans] = useState<SavedScan[] | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget || !firebaseUser) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/user/scans/${deleteTarget.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? 'Failed to delete.');
+      }
+      setScans((prev) => prev?.filter((s) => s.scanId !== deleteTarget.id) ?? null);
+      setDeleteTarget(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -351,7 +397,14 @@ export default function ProfilePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-6">
             <AddClosetTile />
             {closetTiles.map((tile) => (
-              <ClosetItem key={tile.id} {...tile} />
+              <ClosetItem
+                key={tile.id}
+                {...tile}
+                onRequestDelete={() => {
+                  setDeleteError(null);
+                  setDeleteTarget({ id: tile.id, label: tile.label });
+                }}
+              />
             ))}
           </div>
           {scans === null && (
@@ -360,6 +413,48 @@ export default function ProfilePage() {
         </div>
 
       </div>
+
+      {deleteTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Remove from closet"
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !deleting) setDeleteTarget(null);
+          }}
+        >
+          <div
+            className="bg-surface rounded-2xl p-5 max-w-sm w-full"
+            style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.2)' }}
+          >
+            <p className="text-[16px] font-semibold text-ink mb-1">Remove from closet?</p>
+            <p className="text-[14px] text-ink-muted mb-4">
+              {deleteTarget.label} will be removed and your environmental credit reversed.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="flex-1 rounded-xl py-3 text-[15px] font-semibold text-ink-muted border border-rule transition-colors hover:bg-surface-sunk disabled:opacity-50 cursor-pointer disabled:cursor-default"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="flex-1 rounded-xl py-3 text-[15px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer disabled:cursor-default"
+                style={{ backgroundColor: '#B23A2B' }}
+              >
+                {deleting ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+            {deleteError && <p className="text-[13px] text-danger mt-3">{deleteError}</p>}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
