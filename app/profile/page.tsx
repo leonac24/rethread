@@ -1,24 +1,27 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/lib/firebase/auth-context';
-import type { OutcomeAction } from '@/types/garment';
+import type { OutcomeAction, ScanResult } from '@/types/garment';
 
-const MOCK_SCANS: {
+type SavedScan = {
+  scanId: string;
+  action: OutcomeAction;
+  result: ScanResult;
+  createdAt: number;
+  imageUrls?: string[];
+};
+
+type ClosetTile = {
   id: string;
   label: string;
   fiber: string;
   action: OutcomeAction;
   date: string;
-  img: string;
-}[] = [
-  { id: '1', label: "Levi's 501 Jeans", fiber: '100% Cotton', action: 'repair', date: 'Apr 9', img: '/images/garment.webp' },
-  { id: '2', label: 'Patagonia Fleece', fiber: '100% Recycled Polyester', action: 'list', date: 'Apr 7', img: '/images/garment.webp' },
-  { id: '3', label: 'H&M Basic Tee', fiber: '60% Cotton / 40% Polyester', action: 'donate', date: 'Apr 3', img: '/images/garment.webp' },
-  { id: '4', label: 'Zara Blazer', fiber: '80% Viscose / 20% Polyester', action: 'throw_away', date: 'Mar 28', img: '/images/garment.webp' },
-  { id: '5', label: 'Nike Hoodie', fiber: '80% Cotton / 20% Polyester', action: 'repair', date: 'Mar 20', img: '/images/garment.webp' },
-];
+  imageUrls: string[];
+};
 
 const ACTION_BADGE: Record<OutcomeAction, { label: string; color: string }> = {
   donate: { label: 'Donated', color: '#5E8B6C' },      // green — best
@@ -56,9 +59,10 @@ function ActionBadge({ action }: { action: OutcomeAction }) {
   );
 }
 
-function ClosetItem({ label, fiber, action, date, img }: (typeof MOCK_SCANS)[number]) {
+function ClosetItem({ id, label, fiber, action, date, imageUrls }: ClosetTile) {
+  const imgSrc = imageUrls[0] ?? '/images/garment.webp';
   return (
-    <div className="flex flex-col items-center w-full">
+    <Link href={`/closet/${id}`} className="flex flex-col items-center w-full">
       {/* hanger on top */}
       <Image
         src="/images/hanger.webp"
@@ -75,7 +79,7 @@ function ClosetItem({ label, fiber, action, date, img }: (typeof MOCK_SCANS)[num
       >
         <div className="absolute inset-0 flex items-center justify-center p-4">
           <Image
-            src={img}
+            src={imgSrc}
             alt={label}
             width={200}
             height={200}
@@ -93,7 +97,7 @@ function ClosetItem({ label, fiber, action, date, img }: (typeof MOCK_SCANS)[num
         </div>
         <p className="text-[10px] text-ink-faint mt-0.5 font-medium">{date}</p>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -185,18 +189,68 @@ function RankBadge({
 }
 
 export default function ProfilePage() {
-  const { user, loading } = useAuth();
+  const { user, firebaseUser, loading } = useAuth();
+  const [scans, setScans] = useState<SavedScan[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!firebaseUser) {
+      setScans(null);
+      return;
+    }
+    (async () => {
+      try {
+        const token = await firebaseUser.getIdToken();
+        const res = await fetch('/api/user/scans', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          if (!cancelled) setScans([]);
+          return;
+        }
+        const data = (await res.json()) as { scans: SavedScan[] };
+        if (!cancelled) setScans(data.scans ?? []);
+      } catch {
+        if (!cancelled) setScans([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser]);
 
   const scanCount = user?.actionCount ?? 12;
   const currentTier = getTier(scanCount);
 
-  const actionCounts = MOCK_SCANS.reduce<Record<OutcomeAction, number>>(
+  const actionCounts = (scans ?? []).reduce<Record<OutcomeAction, number>>(
     (acc, s) => {
       acc[s.action] = (acc[s.action] ?? 0) + 1;
       return acc;
     },
     { repair: 0, list: 0, donate: 0, throw_away: 0 },
   );
+
+  const closetTiles: ClosetTile[] = (scans ?? []).map((scan) => {
+    const fibers = scan.result.garment.fibers ?? [];
+    const fiberStr =
+      fibers.length > 0
+        ? fibers.map((f) => `${f.percentage}% ${f.material}`).join(' / ')
+        : 'Unknown fiber';
+    const label =
+      scan.result.garment.category ?? scan.result.garment.brand ?? 'Garment';
+    const date = new Date(scan.createdAt).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+    return {
+      id: scan.scanId,
+      label,
+      fiber: fiberStr,
+      action: scan.action,
+      date,
+      imageUrls: scan.imageUrls ?? [],
+    };
+  });
 
   const co2Lbs = user ? ((user.totalCO2SavedKg ?? 0) * 2.205).toFixed(1) : '34';
   const waterGal = user ? Math.round((user.totalWaterSavedLiters ?? 0) * 0.264).toLocaleString() : '2,400';
@@ -292,14 +346,17 @@ export default function ProfilePage() {
         </div>
 
         {/* ── My Closet ── */}
-        <div>
+        <div className="pb-8">
           <h2 className="text-[13px] font-bold tracking-[0.12em] uppercase text-ink-muted mb-4">My Closet</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-6 pb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-6">
             <AddClosetTile />
-            {MOCK_SCANS.map((scan) => (
-              <ClosetItem key={scan.id} {...scan} />
+            {closetTiles.map((tile) => (
+              <ClosetItem key={tile.id} {...tile} />
             ))}
           </div>
+          {scans === null && (
+            <p className="text-[11px] text-ink-faint mt-4">Loading your closet…</p>
+          )}
         </div>
 
       </div>

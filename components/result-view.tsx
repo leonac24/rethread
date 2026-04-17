@@ -10,8 +10,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import type { RouteOption, ScanResult } from '@/types/garment';
+import type { OutcomeAction, RouteOption, ScanResult } from '@/types/garment';
 import { OutcomeSection } from '@/components/outcome-section';
+import { useAuth } from '@/lib/firebase/auth-context';
 
 function truncate(text: string, maxWords: number): string {
   const words = text.split(/\s+/);
@@ -117,14 +118,24 @@ function colorToCSS(name: string): string {
 
 type ResultViewProps = {
   id: string;
+  readOnly?: boolean;
 };
 
-export function ResultView({ id }: ResultViewProps) {
+const SAVED_ACTION_META: Record<OutcomeAction, { label: string; color: string; sentence: string }> = {
+  donate: { label: 'Donate', color: '#5E8B6C', sentence: 'You donated this garment.' },
+  list: { label: 'List / Swap', color: '#C9983E', sentence: 'You listed this garment.' },
+  repair: { label: 'Repair', color: '#8B6A1E', sentence: 'You repaired this garment.' },
+  throw_away: { label: 'Throw Away', color: '#B23A2B', sentence: 'You threw this garment away.' },
+};
+
+export function ResultView({ id, readOnly = false }: ResultViewProps) {
+  const { firebaseUser, loading: authLoading } = useAuth();
   const [data, setData] = useState<{
     text: string;
     result: ScanResult;
     previews?: string[];
   } | null>(null);
+  const [savedAction, setSavedAction] = useState<OutcomeAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -141,7 +152,43 @@ export function ResultView({ id }: ResultViewProps) {
   useEffect(() => {
     let isActive = true;
 
-    async function load() {
+    async function loadSaved() {
+      if (authLoading) return;
+      if (!firebaseUser) {
+        if (isActive) setError('Sign in to view saved scans.');
+        return;
+      }
+      try {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch(`/api/user/scans/${id}`, {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = (await response.json()) as {
+          error?: string;
+          scanId?: string;
+          action?: OutcomeAction;
+          result?: ScanResult;
+          text?: string;
+          imageUrls?: string[];
+        };
+        if (!response.ok || !payload.result || typeof payload.text !== 'string') {
+          throw new Error(payload.error ?? 'Result not found.');
+        }
+        if (isActive) {
+          setData({
+            text: payload.text,
+            result: payload.result,
+            previews: payload.imageUrls?.length ? payload.imageUrls : undefined,
+          });
+          if (payload.action) setSavedAction(payload.action);
+        }
+      } catch (caughtError) {
+        if (isActive) setError(caughtError instanceof Error ? caughtError.message : 'Result not found.');
+      }
+    }
+
+    async function loadFresh() {
       const cached = sessionStorage.getItem(`scan:${id}`);
       if (cached) {
         try {
@@ -175,9 +222,13 @@ export function ResultView({ id }: ResultViewProps) {
       }
     }
 
-    void load();
+    if (readOnly) {
+      void loadSaved();
+    } else {
+      void loadFresh();
+    }
     return () => { isActive = false; };
-  }, [id]);
+  }, [id, readOnly, firebaseUser, authLoading]);
 
   const dyeScore = data?.result.cost.dye_pollution_score ?? 0;
   const dyeColor = dyeScore <= 3 ? '#5E8B6C' : dyeScore <= 6 ? '#C8A24A' : '#B23A2B';
@@ -603,11 +654,39 @@ export function ResultView({ id }: ResultViewProps) {
             </Card>
 
             {/* ── Outcome Selection ────────────────────────────────── */}
-            <OutcomeSection
-              id={id}
-              cost={data.result.cost}
-              condition={data.result.garment.condition}
-            />
+            {readOnly ? (
+              (() => {
+                const meta = savedAction ? SAVED_ACTION_META[savedAction] : null;
+                return (
+                  <Card>
+                    <SectionLabel>Your Action</SectionLabel>
+                    {meta ? (
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-bold"
+                          style={{ backgroundColor: `${meta.color}18`, color: meta.color }}
+                        >
+                          <span
+                            className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: meta.color }}
+                          />
+                          Saved Outcome · {meta.label}
+                        </span>
+                        <p className="text-[15px] text-ink-muted">{meta.sentence}</p>
+                      </div>
+                    ) : (
+                      <p className="text-[15px] text-ink-muted">No action recorded.</p>
+                    )}
+                  </Card>
+                );
+              })()
+            ) : (
+              <OutcomeSection
+                id={id}
+                cost={data.result.cost}
+                condition={data.result.garment.condition}
+              />
+            )}
 
             {/* ── Raw OCR Text (receipt) ───────────────────────────── */}
             <div className="flex justify-center">

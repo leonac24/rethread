@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useAuth } from '@/lib/firebase/auth-context';
+import { uploadScanImages } from '@/lib/firebase/upload-scan-images';
 import type { EnvironmentalCost, GarmentCondition, OutcomeAction } from '@/types/garment';
 
 type Status = 'idle' | 'confirming' | 'loading' | 'done' | 'conflict' | 'error';
@@ -124,6 +126,7 @@ function recommendedAction(condition?: GarmentCondition): OutcomeAction | null {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
+  const { firebaseUser } = useAuth();
   const [status, setStatus] = useState<Status>('idle');
   const [pendingAction, setPendingAction] = useState<OutcomeAction | null>(null);
   const [doneAction, setDoneAction] = useState<OutcomeAction | null>(null);
@@ -137,10 +140,37 @@ export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
     setErrorMsg(null);
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (firebaseUser) {
+        const token = await firebaseUser.getIdToken();
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      let imageUrls: string[] = [];
+      if (firebaseUser && action !== 'throw_away') {
+        try {
+          const raw = sessionStorage.getItem(`scan:${id}`);
+          if (raw) {
+            const parsed = JSON.parse(raw) as { previews?: string[] };
+            const previews = Array.isArray(parsed.previews) ? parsed.previews : [];
+            if (previews.length > 0) {
+              imageUrls = await uploadScanImages({
+                uid: firebaseUser.uid,
+                scanId: id,
+                dataUrls: previews,
+              });
+            }
+          }
+        } catch (err) {
+          console.error('[outcome-section] image upload failed', err);
+        }
+      }
+
+      const body = imageUrls.length > 0 ? { action, imageUrls } : { action };
       const res = await fetch(`/api/scan/${id}/outcome`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        headers,
+        body: JSON.stringify(body),
       });
 
       if (res.status === 409) {
@@ -161,7 +191,8 @@ export function OutcomeSection({ id, cost, condition }: OutcomeSectionProps) {
 
       setDoneAction(action);
       setStatus('done');
-    } catch {
+    } catch (err) {
+      console.error('[outcome-section] submit failed', err);
       setErrorMsg('Network error — please check your connection and try again.');
       setStatus('error');
     }
