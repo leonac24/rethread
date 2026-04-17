@@ -46,35 +46,40 @@ var icon=L.icon({iconUrl:'https://unpkg.com/leaflet@1.9.4/dist/images/marker-ico
 
 const FIBER_COLORS = ['#8B9E6E', '#6FA8CE', '#C8A24A', '#B8739D', '#C4956A', '#8E6BAD', '#6AADA8', '#A6ADB6'];
 
-const ROUTE_META: Record<string, { bg: string; label: string; icon: React.ReactNode }> = {
-  repair: {
-    bg: '#ECE8DF',
-    label: 'Repair',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5C6470" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-      </svg>
-    ),
-  },
-  resale: {
-    bg: '#EAF4FB',
-    label: 'Resale',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5C6470" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
-      </svg>
-    ),
-  },
+const ROUTE_META: Record<string, { bg: string; iconColor: string; label: string; icon: React.ReactNode }> = {
   donation: {
-    bg: '#F5EEF8',
+    bg: '#E8F0E6',
+    iconColor: '#5E8B6C',
     label: 'Donation',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5C6470" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
       </svg>
     ),
   },
+  resale: {
+    bg: '#FBF1D4',
+    iconColor: '#C9983E',
+    label: 'Resale',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
+    ),
+  },
+  repair: {
+    bg: '#F2E4C7',
+    iconColor: '#8B6A1E',
+    label: 'Repair',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+      </svg>
+    ),
+  },
 };
+
+const ROUTE_ORDER: Record<string, number> = { donation: 0, resale: 1, repair: 2 };
 
 function ChevronRight() {
   return (
@@ -603,12 +608,14 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                 <SectionLabel>Next Routes</SectionLabel>
               </div>
               <div>
-                {data.result.routes.map((route, idx) => {
+                {[...data.result.routes]
+                  .sort((a, b) => (ROUTE_ORDER[a.kind] ?? 99) - (ROUTE_ORDER[b.kind] ?? 99))
+                  .map((route, idx, sorted) => {
                   const meta = ROUTE_META[route.kind] ?? ROUTE_META.donation;
                   const routeKey = `${route.kind}-${route.name}`;
                   const srcdoc = mapSrcdoc(route);
                   const hasLocation = route.lat != null && route.lng != null;
-                  const isLast = idx === data.result.routes.length - 1;
+                  const isLast = idx === sorted.length - 1;
 
                   return (
                     <div key={routeKey}>
@@ -624,7 +631,7 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                       <div className="flex items-center gap-3 px-5 py-3.5">
                         <div
                           className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
-                          style={{ backgroundColor: meta.bg }}
+                          style={{ backgroundColor: meta.bg, color: meta.iconColor }}
                         >
                           {meta.icon}
                         </div>
