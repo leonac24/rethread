@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, mock, beforeEach, setSystemTime } from 'bun:test';
 
 // ─── Mock dependencies before importing routes ────────────────────────────────
 
@@ -230,6 +230,19 @@ describe('GET /api/partners/stats', () => {
       expect(entry.month).toMatch(/^\d{4}-\d{2}$/);
       expect(typeof entry.issued).toBe('number');
       expect(typeof entry.redeemed).toBe('number');
+    }
+  });
+
+  it('year-boundary: oldest bucket is prior-year August when now is January', async () => {
+    setSystemTime(new Date('2026-01-15T12:00:00Z'));
+    try {
+      const res = await GET(makeRequest());
+      const body = await res.json();
+      expect(body.monthly).toHaveLength(6);
+      expect(body.monthly[0].month).toBe('2025-08');
+      expect(body.monthly[5].month).toBe('2026-01');
+    } finally {
+      setSystemTime(); // restore real clock
     }
   });
 });

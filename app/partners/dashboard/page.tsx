@@ -16,6 +16,8 @@ import { useAuth } from '@/lib/firebase/auth-context';
 import { LoadingScreen } from '@/components/loading-screen';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
+import { PER_REDEMPTION_USD } from '@/lib/config';
+import type { PartnerStatus } from '@/types/partner';
 
 type MonthBucket = {
   month: string;
@@ -29,8 +31,32 @@ type StatsData = {
   conversionPct: number;
   estimatedOwed: number;
   monthly: MonthBucket[];
-  status: string;
+  status: PartnerStatus;
 };
+
+function useThemeColors() {
+  const [c, setC] = useState({
+    accent: '#6FA8CE',
+    success: '#5E8B6C',
+    inkMuted: '#5C6470',
+    rule: 'rgba(20,22,26,0.10)',
+    surface: '#FBF9F4',
+    ink: '#14161A',
+  });
+  useEffect(() => {
+    const s = getComputedStyle(document.documentElement);
+    const v = (name: string, fb: string) => s.getPropertyValue(name).trim() || fb;
+    setC({
+      accent: v('--color-accent-500', '#6FA8CE'),
+      success: v('--color-success', '#5E8B6C'),
+      inkMuted: v('--color-ink-muted', '#5C6470'),
+      rule: v('--color-rule', 'rgba(20,22,26,0.10)'),
+      surface: v('--color-surface', '#FBF9F4'),
+      ink: v('--color-ink', '#14161A'),
+    });
+  }, []);
+  return c;
+}
 
 function StatTile({
   label,
@@ -55,46 +81,49 @@ function StatTile({
 }
 
 function MonthlyChart({ data }: { data: MonthBucket[] }) {
-  const formatted = data.map((d) => ({
-    ...d,
-    month: d.month.slice(5), // show MM only
-  }));
+  const colors = useThemeColors();
+
+  const formatted = data.map((d) => {
+    const [y, m] = d.month.split('-');
+    const label = new Date(Date.UTC(+y, +m - 1, 1)).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+    return { ...d, month: label };
+  });
 
   return (
     <div style={{ height: 240 }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={formatted} barCategoryGap="30%" barGap={4}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(20,22,26,0.08)" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={colors.rule} vertical={false} />
           <XAxis
             dataKey="month"
-            tick={{ fontSize: 12, fill: '#6B6F72', fontFamily: 'JetBrains Mono, monospace' }}
+            tick={{ fontSize: 12, fill: colors.inkMuted, fontFamily: 'JetBrains Mono, monospace' }}
             axisLine={false}
             tickLine={false}
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fontSize: 12, fill: '#6B6F72', fontFamily: 'JetBrains Mono, monospace' }}
+            tick={{ fontSize: 12, fill: colors.inkMuted, fontFamily: 'JetBrains Mono, monospace' }}
             axisLine={false}
             tickLine={false}
             width={32}
           />
           <Tooltip
             contentStyle={{
-              background: '#FBF9F4',
-              border: '1px solid rgba(20,22,26,0.08)',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-rule)',
               borderRadius: 10,
               fontSize: 12,
-              color: '#14161A',
+              color: 'var(--color-ink)',
               boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
             }}
-            itemStyle={{ color: '#14161A' }}
+            itemStyle={{ color: 'var(--color-ink)' }}
             cursor={{ fill: 'rgba(20,22,26,0.04)' }}
           />
           <Legend
-            wrapperStyle={{ fontSize: 12, color: '#6B6F72', paddingTop: 8 }}
+            wrapperStyle={{ fontSize: 12, color: colors.inkMuted, paddingTop: 8 }}
           />
-          <Bar dataKey="issued" name="Issued" fill="#6FA8CE" radius={[2, 2, 0, 0]} />
-          <Bar dataKey="redeemed" name="Redeemed" fill="#8B9E6E" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="issued" name="Issued" fill={colors.accent} radius={[2, 2, 0, 0]} />
+          <Bar dataKey="redeemed" name="Redeemed" fill={colors.success} radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -240,7 +269,7 @@ export default function PartnersDashboardPage() {
             <StatTile
               label="Est. owed"
               value={`$${estimatedOwed.toFixed(2)}`}
-              caption="at $0.75 per confirmed redemption"
+              caption={`at $${PER_REDEMPTION_USD.toFixed(2)} per confirmed redemption`}
             />
           </div>
 
