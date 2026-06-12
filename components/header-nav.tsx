@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/auth-context';
 
@@ -10,28 +11,41 @@ export function HeaderNav() {
 
   if (loading) {
     return (
-      <div className="w-8 h-8 rounded-full bg-surface-sunk animate-pulse mr-5" />
+      <div className="flex items-center gap-4 mr-5">
+        <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+          Brands
+        </Link>
+        <div className="w-8 h-8 rounded-full bg-surface-sunk animate-pulse" />
+      </div>
     );
   }
 
   if (!user) {
     return (
-      <a
-        href="/login"
-        className="mr-5 w-8 h-8 rounded-full border border-rule flex items-center justify-center text-ink-muted hover:text-ink hover:bg-surface transition-colors cursor-pointer"
-        title="Sign in"
-        aria-label="Sign in"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-      </a>
+      <div className="flex items-center gap-4 mr-5">
+        <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+          Brands
+        </Link>
+        <a
+          href="/login"
+          className="w-8 h-8 rounded-full border border-rule flex items-center justify-center text-ink-muted hover:text-ink hover:bg-surface transition-colors cursor-pointer"
+          title="Sign in"
+          aria-label="Sign in"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        </a>
+      </div>
     );
   }
 
   return (
-    <div className="mr-5 flex items-center gap-3">
+    <div className="mr-5 flex items-center gap-4">
+      <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+        Brands
+      </Link>
       {/* Avatar → profile */}
       <a href="/profile" className="flex items-center gap-2 group">
         {user.photoURL ? (
