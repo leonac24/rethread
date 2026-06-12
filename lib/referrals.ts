@@ -66,6 +66,7 @@ export async function redeemReferral(
     const r = snap.data()!;
     if (r.partnerId !== partnerUid) return { ok: false as const, reason: 'wrong_partner' as const };
     if (r.status === 'redeemed') return { ok: false as const, reason: 'already_redeemed' as const };
+    if (!r.expiresAt || typeof r.expiresAt.toMillis !== 'function') return { ok: false as const, reason: 'expired' as const };
     if (r.expiresAt.toMillis() < Date.now()) return { ok: false as const, reason: 'expired' as const };
     tx.update(ref, { status: 'redeemed', redeemedAt: FieldValue.serverTimestamp() });
     return { ok: true as const };
