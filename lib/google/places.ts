@@ -6,6 +6,45 @@ import { log } from '@/lib/logger';
 
 const SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
 
+// Geocode a free-text address using Places Text Search.
+// Returns placeId, lat, lng on success; null on any error.
+export async function geocodeAddress(
+  address: string,
+): Promise<{ placeId: string; lat: number; lng: number } | null> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch(SEARCH_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(8_000),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.location',
+      },
+      body: JSON.stringify({ textQuery: address, maxResultCount: 1 }),
+    });
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      places?: Array<{ id?: string; location?: { latitude: number; longitude: number } }>;
+    };
+
+    const place = data.places?.[0];
+    if (!place?.id || !place.location) return null;
+
+    return {
+      placeId: place.id,
+      lat: place.location.latitude,
+      lng: place.location.longitude,
+    };
+  } catch {
+    return null;
+  }
+}
+
 const QUERIES: Record<RouteKind, string> = {
   repair: 'clothing repair tailor',
   resale: 'consignment thrift store',
