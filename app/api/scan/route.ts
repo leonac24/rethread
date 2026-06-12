@@ -8,6 +8,8 @@ import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { RouteOption, ScanResult } from '@/types/garment';
 import { computeGarmentScore } from '@/lib/score/garment';
 import { prioritizeRoutesByCondition } from '@/lib/route-utils';
+import { resolveBrand, recordScanEvidence } from '@/lib/brands';
+import { upsertRegistryEntry } from '@/lib/registry';
 
 // ─── File validation ──────────────────────────────────────────────────────────
 // Validate image by magic bytes — file.type is user-controlled and can be forged
@@ -158,6 +160,15 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
 
   reqLog.info('Ingest complete', { stage: 'ingest', brand: garment.brand ?? null, category: garment.category });
 
+  // [BRAND] Resolve Gemini-extracted brand name to a registry record for scoring + evidence.
+  // Failures (e.g. no Firestore credentials) are swallowed so the scan always continues.
+  const brandRecord = garment.brand
+    ? await resolveBrand(garment.brand).catch((err) => {
+        reqLog.warn('resolveBrand failed', { stage: 'brand', err: err instanceof Error ? err.message : String(err) });
+        return null;
+      })
+    : null;
+
   // [COST] Fetch brand context from BigQuery, then compute cost via Gemini — in parallel with routes
   const latRaw = formData.get('lat');
   const lngRaw = formData.get('lng');
@@ -216,6 +227,10 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     origin: garment.origin,
     dyeRisk: cost.dye_pollution_score,
     provenance: garment.provenance,
+    // Scans must not feed back into the garment score via productImpact (circularity guard).
+    brandDims: brandRecord
+      ? { transparency: brandRecord.dims.transparency, laborSupplyChain: brandRecord.dims.laborSupplyChain }
+      : undefined,
   });
 
   const result: ScanResult = {
@@ -225,11 +240,30 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     routes: prioritizeRoutesByCondition(routes, garment.condition),
     garment_score,
     ...(landfill_impact ? { landfill_impact } : {}),
+    ...(brandRecord
+      ? { brand_page: { slug: brandRecord.slug, name: brandRecord.name, grade: brandRecord.grade, score: brandRecord.score, status: brandRecord.status } }
+      : {}),
   };
 
   const id = await saveScanResult('', result);
 
   reqLog.info('Scan complete', { stage: 'scan', id });
+
+  // Fire-and-forget: record brand evidence + upsert registry spec. Must NOT delay or fail the response.
+  if (brandRecord) {
+    recordScanEvidence(brandRecord.slug, garment_score.score).catch((err) => {
+      reqLog.warn('recordScanEvidence failed', { stage: 'evidence', err: err instanceof Error ? err.message : String(err) });
+    });
+  }
+  upsertRegistryEntry({
+    category: garment.category,
+    fibers: garment.fibers,
+    origin: garment.origin,
+    brandSlug: brandRecord?.slug,
+    score: garment_score,
+  }).catch((err) => {
+    reqLog.warn('upsertRegistryEntry failed', { stage: 'registry', err: err instanceof Error ? err.message : String(err) });
+  });
 
   return Response.json({ id, text: '', result }, { headers: { 'X-Trace-Id': traceId } });
 }
