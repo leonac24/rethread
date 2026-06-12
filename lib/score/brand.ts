@@ -10,12 +10,16 @@ export function kappaForStatus(status: BrandStatus): number {
 }
 
 export function updateProductImpact(d: { baseline: number; kappa: number; n: number; sum: number }): number {
-  return (d.kappa * d.baseline + d.sum) / (d.kappa + d.n);
+  // kappa is always >= 15 in practice, but guard malformed firestore data
+  const denom = d.kappa + d.n;
+  if (denom === 0 || !Number.isFinite(denom)) return d.baseline;
+  return (d.kappa * d.baseline + d.sum) / denom;
 }
 
 export function computeBrandScore(dims: { productImpact: number; transparency: number; laborSupplyChain: number }): { score: number; grade: Grade } {
+  const safe = (n: number) => Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0;
   const score = Math.round(
-    (dims.productImpact * W.productImpact + dims.transparency * W.transparency + dims.laborSupplyChain * W.laborSupplyChain) * 10,
+    (safe(dims.productImpact) * W.productImpact + safe(dims.transparency) * W.transparency + safe(dims.laborSupplyChain) * W.laborSupplyChain) * 10,
   ) / 10;
   return { score, grade: gradeForScore(score) };
 }
@@ -24,7 +28,7 @@ export function slugifyBrand(name: string): string {
   return name
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }

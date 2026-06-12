@@ -41,4 +41,21 @@ describe('slugifyBrand', () => {
   test('strips diacritics', () => {
     expect(slugifyBrand('Désigual')).toBe('desigual');
   });
+  test('empty string returns empty string', () => {
+    expect(slugifyBrand('')).toBe('');
+  });
+});
+
+describe('updateProductImpact – malformed data', () => {
+  test('zero denom (kappa=0, n=0) returns baseline', () => {
+    expect(updateProductImpact({ baseline: 60, kappa: 0, n: 0, sum: 0 })).toBe(60);
+  });
+});
+
+describe('computeBrandScore – non-finite / out-of-range inputs', () => {
+  test('NaN productImpact coerced to 0, transparency clamped to 100, negative laborSupplyChain clamped to 0', () => {
+    const { score, grade } = computeBrandScore({ productImpact: NaN, transparency: 200, laborSupplyChain: -50 });
+    expect(score).toBe(30);
+    expect(grade).toBe('F');
+  });
 });
