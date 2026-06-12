@@ -1,4 +1,4 @@
-import type { EnvironmentalCost, Garment, GarmentCondition, LandfillImpact } from '@/types/garment';
+import type { EnvironmentalCost, Fiber, Garment, GarmentCondition, LandfillImpact, Provenance } from '@/types/garment';
 import { log } from '@/lib/logger';
 import { GEMINI_TIMEOUT_MS } from '@/lib/config';
 import { withRetry, HttpError } from '@/lib/retry';
@@ -524,4 +524,200 @@ export async function analyzeGarmentImage(
         ? (result.condition as GarmentCondition)
         : null,
   };
+}
+
+// ── Single-call multimodal ingest ─────────────────────────────────────────
+// Replaces the Vision-OCR-then-parse chain: one Gemini request reads all label
+// images (plus an optional garment photo) and returns structured garment data
+// with per-field provenance (stated = read off the label, inferred = guessed).
+
+export type IngestResult = {
+  fibers: Fiber[];
+  origin: string | null;
+  category: string | null;
+  brand?: string;
+  color?: string;
+  condition?: GarmentCondition;
+  provenance: { fibers: Provenance; origin: Provenance; category: Provenance; brand?: Provenance };
+  confidence: 'high' | 'medium' | 'low';
+};
+
+const INGEST_PROMPT = [
+  'You are reading clothing care labels. Extract fibers (material + percentage, material normalized to snake_case like recycled_polyester), country of origin, garment category, brand, and (only if a garment photo is included) color and condition (poor|fair|good|excellent).',
+  "If a field is not printed on the label, infer your best guess from brand, category, and typical industry sourcing — and mark that field 'inferred' in provenance. Fields read directly off the label are 'stated'. Never leave provenance unset for a non-null field.",
+].join('\n');
+
+const INGEST_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  required: ['fibers', 'origin', 'category', 'provenance', 'confidence'],
+  properties: {
+    fibers: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        required: ['material', 'percentage'],
+        properties: {
+          material: { type: 'STRING' },
+          percentage: { type: 'NUMBER' },
+        },
+      },
+    },
+    origin: { type: 'STRING', nullable: true },
+    category: { type: 'STRING', nullable: true },
+    brand: { type: 'STRING', nullable: true },
+    color: { type: 'STRING', nullable: true },
+    condition: { type: 'STRING', enum: ['poor', 'fair', 'good', 'excellent'], nullable: true },
+    provenance: {
+      type: 'OBJECT',
+      required: ['fibers', 'origin', 'category'],
+      properties: {
+        fibers: { type: 'STRING', enum: ['stated', 'inferred'] },
+        origin: { type: 'STRING', enum: ['stated', 'inferred'] },
+        category: { type: 'STRING', enum: ['stated', 'inferred'] },
+        brand: { type: 'STRING', enum: ['stated', 'inferred'], nullable: true },
+      },
+    },
+    confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+  },
+} as const;
+
+const VALID_PROVENANCE = new Set<string>(['stated', 'inferred']);
+const VALID_CONFIDENCE = new Set<string>(['high', 'medium', 'low']);
+const VALID_INGEST_CONDITIONS = new Set<string>(['poor', 'fair', 'good', 'excellent']);
+
+function provenanceFor(value: unknown): Provenance {
+  // Default to 'inferred' when the model omits provenance for a present field.
+  if (typeof value === 'string' && VALID_PROVENANCE.has(value)) return value as Provenance;
+  return 'inferred';
+}
+
+function normalizeIngest(parsed: unknown): IngestResult {
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Gemini ingest response is not an object.');
+  }
+  const r = parsed as Record<string, unknown>;
+
+  // Fibers: keep only entries with numeric percentage > 0, cap at 8.
+  const rawFibers = Array.isArray(r.fibers) ? r.fibers : [];
+  const fibers: Fiber[] = rawFibers
+    .filter(
+      (f): f is { material: string; percentage: number } =>
+        !!f &&
+        typeof f === 'object' &&
+        typeof (f as { material?: unknown }).material === 'string' &&
+        typeof (f as { percentage?: unknown }).percentage === 'number' &&
+        (f as { percentage: number }).percentage > 0,
+    )
+    .map((f) => ({
+      material: sanitizeResponseText(f.material.trim(), 60),
+      percentage: Math.max(0, Math.min(100, Math.round(f.percentage))),
+    }))
+    .filter((f) => f.material.length > 0 && f.percentage > 0)
+    .slice(0, 8);
+
+  if (fibers.length === 0) {
+    throw new Error('Gemini ingest returned no valid fibers.');
+  }
+
+  const origin = typeof r.origin === 'string' && r.origin ? sanitizeResponseText(r.origin.trim(), 100) : null;
+  const category = typeof r.category === 'string' && r.category ? sanitizeResponseText(r.category.trim(), 60) : null;
+  const brand = typeof r.brand === 'string' && r.brand ? sanitizeResponseText(r.brand.trim(), 100) : undefined;
+  const color = typeof r.color === 'string' && r.color ? sanitizeResponseText(r.color.trim(), 60) : undefined;
+  const condition =
+    typeof r.condition === 'string' && VALID_INGEST_CONDITIONS.has(r.condition)
+      ? (r.condition as GarmentCondition)
+      : undefined;
+
+  const prov = (r.provenance && typeof r.provenance === 'object' ? r.provenance : {}) as Record<string, unknown>;
+  const provenance: IngestResult['provenance'] = {
+    fibers: provenanceFor(prov.fibers),
+    origin: provenanceFor(prov.origin),
+    category: provenanceFor(prov.category),
+    ...(brand !== undefined ? { brand: provenanceFor(prov.brand) } : {}),
+  };
+
+  const confidence =
+    typeof r.confidence === 'string' && VALID_CONFIDENCE.has(r.confidence)
+      ? (r.confidence as 'high' | 'medium' | 'low')
+      : 'medium';
+
+  return {
+    fibers,
+    origin,
+    category,
+    ...(brand !== undefined ? { brand } : {}),
+    ...(color !== undefined ? { color } : {}),
+    ...(condition !== undefined ? { condition } : {}),
+    provenance,
+    confidence,
+  };
+}
+
+export async function ingestGarment(
+  labelBuffers: Buffer[],
+  garmentPhoto: Buffer | null,
+): Promise<IngestResult> {
+  const apiKey = getApiKey();
+
+  const imageParts = [
+    ...labelBuffers.map((buf) => ({
+      inlineData: { mimeType: 'image/jpeg', data: buf.toString('base64') },
+    })),
+    ...(garmentPhoto
+      ? [{ inlineData: { mimeType: 'image/jpeg', data: garmentPhoto.toString('base64') } }]
+      : []),
+  ];
+
+  const body = JSON.stringify({
+    contents: [
+      {
+        role: 'user',
+        parts: [...imageParts, { text: INGEST_PROMPT }],
+      },
+    ],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: INGEST_RESPONSE_SCHEMA,
+    },
+  });
+
+  // One attempt issues the (retryable) HTTP request, then parses + validates.
+  // A parse/validation failure re-issues the whole request exactly once.
+  const attempt = async (): Promise<IngestResult> => {
+    const data = await withRetry(async () => {
+      const response = await fetch(GEMINI_ENDPOINT, {
+        method: 'POST',
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        headers: geminiHeaders(apiKey),
+        body,
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        log.error('Gemini ingest request failed', undefined, { stage: 'ingest', status: response.status });
+        throw new HttpError(response.status, `Gemini ingest failed (${response.status}): ${text}`);
+      }
+      return response.json() as Promise<GeminiResponse>;
+    }, { retries: 3, label: 'Gemini-ingest' });
+
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) throw new Error('Gemini returned no content for ingest.');
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new Error(`Gemini returned non-JSON for ingest: ${rawText}`);
+    }
+    return normalizeIngest(parsed);
+  };
+
+  try {
+    return await attempt();
+  } catch (err) {
+    log.warn('Gemini ingest parse/validation failed, retrying once', {
+      stage: 'ingest',
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return attempt();
+  }
 }

@@ -5,6 +5,8 @@ export type Fiber = {
 
 export type GarmentCondition = 'poor' | 'fair' | 'good' | 'excellent';
 
+export type Provenance = 'stated' | 'inferred';
+
 export type Garment = {
   fibers: Fiber[];
   origin: string | null;
@@ -12,6 +14,8 @@ export type Garment = {
   brand?: string;
   color?: string;
   condition?: GarmentCondition;
+  provenance?: { fibers: Provenance; origin: Provenance; category: Provenance; brand?: Provenance };
+  ingest_confidence?: 'high' | 'medium' | 'low';
 };
 
 export type EnvironmentalCost = {
