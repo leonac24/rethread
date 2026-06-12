@@ -160,15 +160,6 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
 
   reqLog.info('Ingest complete', { stage: 'ingest', brand: garment.brand ?? null, category: garment.category });
 
-  // [BRAND] Resolve Gemini-extracted brand name to a registry record for scoring + evidence.
-  // Failures (e.g. no Firestore credentials) are swallowed so the scan always continues.
-  const brandRecord = garment.brand
-    ? await resolveBrand(garment.brand).catch((err) => {
-        reqLog.warn('resolveBrand failed', { stage: 'brand', err: err instanceof Error ? err.message : String(err) });
-        return null;
-      })
-    : null;
-
   // [COST] Fetch brand context from BigQuery, then compute cost via Gemini — in parallel with routes
   const latRaw = formData.get('lat');
   const lngRaw = formData.get('lng');
@@ -219,7 +210,9 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     return undefined;
   });
 
-  const [cost, routes, landfill_impact] = await Promise.all([costPromise, routesPromise, landfillPromise]);
+  const brandRecordPromise = garment.brand ? resolveBrand(garment.brand).catch((err) => { reqLog.warn('resolveBrand failed', { stage: 'brand', err: String(err) }); return null; }) : Promise.resolve(null);
+
+  const [cost, routes, landfill_impact, brandRecord] = await Promise.all([costPromise, routesPromise, landfillPromise, brandRecordPromise]);
 
   const garment_score = computeGarmentScore({
     category: garment.category,
