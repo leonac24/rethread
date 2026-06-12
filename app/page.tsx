@@ -1,6 +1,5 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import ScrollToButton from '@/components/scroll-to-button';
 
 const CONTENT_WIDTH = 'content-width';
 
@@ -43,7 +42,7 @@ export default function Home() {
               </Link>
               <Link
                 href="/brands"
-                className="inline-flex items-center justify-center h-12 px-8 rounded-md border border-rule text-ink text-[16px] font-medium transition-colors hover:bg-surface-sunk"
+                className="inline-flex items-center justify-center h-12 px-8 rounded-md border border-rule text-ink text-[16px] font-medium transition-[background-color,transform] duration-[120ms] ease-out hover:bg-surface-sunk active:scale-[0.96]"
               >
                 Browse brands
               </Link>
