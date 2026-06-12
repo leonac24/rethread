@@ -4,6 +4,7 @@ import { verifyBearerToken } from '@/lib/firebase/verify-token';
 import { db } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import type { OutcomeAction } from '@/types/garment';
+import { traced } from '@/lib/tracer';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const VALID_ACTIONS = new Set<OutcomeAction>(['throw_away', 'repair', 'list', 'donate']);
@@ -46,7 +47,9 @@ export async function POST(
     );
   }
 
-  const { conflict, stored } = await recordOutcome(id, action as OutcomeAction);
+  const { conflict, stored } = await traced('outcome.record', { scanId: id, action }, () =>
+    recordOutcome(id, action as OutcomeAction),
+  );
 
   if (!stored) {
     return Response.json({ error: 'Scan not found.' }, { status: 404 });
@@ -91,7 +94,7 @@ export async function POST(
     // The outcome is already recorded in the scan store; the user just won't get
     // environmental credit for this action (logged for ops visibility).
     try {
-      await batch.commit();
+      await traced('outcome.firestore_batch', { action, userId: user.uid }, () => batch.commit());
     } catch (err) {
       console.error('[outcome] Firestore batch failed, totals not credited', {
         uid: user.uid,

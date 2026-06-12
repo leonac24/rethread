@@ -3,6 +3,7 @@ import { log } from '@/lib/logger';
 import { GEMINI_TIMEOUT_MS } from '@/lib/config';
 import { withRetry, HttpError } from '@/lib/retry';
 import { computeFiberImpact } from '@/lib/fiber-impact';
+import { traced } from '@/lib/tracer';
 
 // Gemini — structured environmental-cost reasoning + garment image analysis.
 // Enforce responseSchema so output always matches expected types.
@@ -165,7 +166,7 @@ export async function computeCost(
   const prompt = buildPrompt(garment, brandContext);
   const hasDyeFields = !!garment.color;
 
-  const data = await withRetry(async () => {
+  const data = await traced('scan.gemini_cost', { brand: garment.brand ?? 'unknown', fiberCount: garment.fibers.length }, () => withRetry(async () => {
     const response = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
       signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
@@ -201,7 +202,7 @@ export async function computeCost(
       throw new HttpError(response.status, `Gemini request failed (${response.status}): ${text}`);
     }
     return response.json() as Promise<GeminiResponse>;
-  }, { retries: 3, label: 'Gemini' });
+  }, { retries: 3, label: 'Gemini' }));
 
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!rawText) throw new Error('Gemini returned no content.');
@@ -229,6 +230,7 @@ export type GarmentImageAnalysis = {
 };
 
 export async function computeLandfillImpact(garment: Garment): Promise<LandfillImpact> {
+  return traced('scan.gemini_landfill', { category: garment.category ?? 'unknown' }, async () => {
   const apiKey = getApiKey();
 
   const fiberList = garment.fibers.length
@@ -298,6 +300,7 @@ export async function computeLandfillImpact(garment: Garment): Promise<LandfillI
     dye_runoff: String(r.dye_runoff ?? ''),
     breakdown_years: String(r.breakdown_years ?? ''),
   };
+  });
 }
 
 export type LabelParseResult = {
@@ -308,6 +311,7 @@ export type LabelParseResult = {
 };
 
 export async function parseLabelWithGemini(ocrText: string): Promise<LabelParseResult> {
+  return traced('scan.gemini_parse', { textLength: ocrText.length }, async () => {
   const apiKey = getApiKey();
 
   const prompt = [
@@ -443,6 +447,7 @@ export async function parseLabelWithGemini(ocrText: string): Promise<LabelParseR
     category: typeof r.category === 'string' && r.category ? r.category.trim() : null,
     fibers,
   };
+  });
 }
 
 export async function analyzeGarmentImage(
@@ -451,6 +456,7 @@ export async function analyzeGarmentImage(
 ): Promise<GarmentImageAnalysis> {
   const apiKey = getApiKey();
 
+  return traced('scan.gemini_garment', { mimeType }, async () => {
   const base64Image = imageBuffer.toString('base64');
 
   const prompt = [
@@ -523,4 +529,5 @@ export async function analyzeGarmentImage(
         ? (result.condition as GarmentCondition)
         : null,
   };
+  });
 }

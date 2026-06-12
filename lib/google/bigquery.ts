@@ -5,6 +5,7 @@ import { getGoogleAccessToken, getGoogleCredentials } from '@/lib/google/client'
 import { log } from '@/lib/logger';
 import { BRAND_CACHE_TTL_MS, BIGQUERY_TIMEOUT_MS } from '@/lib/config';
 import { withRetry, HttpError } from '@/lib/retry';
+import { traced } from '@/lib/tracer';
 
 type BigQueryQueryResponse = {
   rows?: Array<{
@@ -95,7 +96,7 @@ export async function getBrandContext(
     LIMIT 1
   `;
 
-  const data = await withRetry(async () => {
+  const data = await traced('scan.bigquery_brand', { brand: brandKey, cacheHit: false }, () => withRetry(async () => {
     // Token fetched inside the retry body — each attempt gets a fresh token
     // so a 401 retry isn't stuck reusing the token that just expired.
     const token = await getGoogleAccessToken([
@@ -131,7 +132,7 @@ export async function getBrandContext(
       throw new HttpError(response.status, `BigQuery request failed (${response.status}): ${text}`);
     }
     return response.json() as Promise<BigQueryQueryResponse>;
-  }, { retries: 2, label: 'BigQuery' });
+  }, { retries: 2, label: 'BigQuery' }));
   if (data.errors?.length) {
     throw new Error(`BigQuery error: ${data.errors[0]?.message || 'Unknown error'}`);
   }

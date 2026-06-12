@@ -3,6 +3,7 @@
 // Requires WIKIRATE_API_KEY env var (free registration at wikirate.org).
 
 import { log } from '@/lib/logger';
+import { traced } from '@/lib/tracer';
 
 export type WikiRateResult = {
   score: number;        // 0–100
@@ -150,6 +151,7 @@ export async function getFashionTransparencyScore(
   // Encode company name for URL: spaces → underscores, & → %26
   const companySlug = companyName.replace(/\s+/g, '_').replace(/&/g, '%26');
 
+  return traced('scan.wikirate_fti', { brand: companyName, cacheHit: false }, async () => {
   for (const year of years) {
     try {
       // Direct card endpoint — fetches exactly this company+metric+year, no filter ambiguity
@@ -207,6 +209,7 @@ export async function getFashionTransparencyScore(
   // Cache negative result so we don't hammer the API for unknown brands
   cache.set(cacheKey, { result: null, cachedAt: Date.now() });
   return null;
+  });
 }
 
 // Format the FTI result as a human-readable context string for Gemini

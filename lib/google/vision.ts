@@ -1,6 +1,7 @@
 import type { Garment } from '@/types/garment';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 import { getGoogleCredentials } from '@/lib/google/client';
+import { traced } from '@/lib/tracer';
 
 // Cloud Vision — OCR a care-label photo.
 
@@ -155,17 +156,19 @@ export async function readClothingLabelText(image: Buffer): Promise<string> {
     throw new Error('Image buffer is empty');
   }
 
-  const client = getVisionClient();
-  const [result] = await client.documentTextDetection({
-    image: { content: image },
+  return traced('scan.vision_ocr', { imageBytes: image.length }, async () => {
+    const client = getVisionClient();
+    const [result] = await client.documentTextDetection({
+      image: { content: image },
+    });
+
+    const text =
+      result.fullTextAnnotation?.text ??
+      result.textAnnotations?.[0]?.description ??
+      '';
+
+    return text;
   });
-
-  const text =
-    result.fullTextAnnotation?.text ??
-    result.textAnnotations?.[0]?.description ??
-    '';
-
-  return text;
 }
 
 export async function readClothingLabel(

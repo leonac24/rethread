@@ -1,17 +1,31 @@
 // Structured JSON logger for consistent server-side output.
 // Always include a `stage` field in ctx to identify pipeline step.
+// Injects dd.trace_id and dd.span_id from the active Datadog span for log correlation.
+
+import tracer from 'dd-trace';
+
+function ddCorrelation(): Record<string, string> {
+  const span = tracer.scope().active();
+  if (!span) return {};
+  const ctx = span.context();
+  return {
+    'dd.trace_id': ctx.toTraceId(),
+    'dd.span_id': ctx.toSpanId(),
+  };
+}
 
 export const log = {
   info: (msg: string, ctx?: Record<string, unknown>) =>
-    console.log(JSON.stringify({ level: 'info', msg, ...ctx, ts: new Date().toISOString() })),
+    console.log(JSON.stringify({ level: 'info', msg, ...ddCorrelation(), ...ctx, ts: new Date().toISOString() })),
   warn: (msg: string, ctx?: Record<string, unknown>) =>
-    console.warn(JSON.stringify({ level: 'warn', msg, ...ctx, ts: new Date().toISOString() })),
+    console.warn(JSON.stringify({ level: 'warn', msg, ...ddCorrelation(), ...ctx, ts: new Date().toISOString() })),
   error: (msg: string, err?: unknown, ctx?: Record<string, unknown>) =>
     console.error(
       JSON.stringify({
         level: 'error',
         msg,
         err: err instanceof Error ? err.message : String(err),
+        ...ddCorrelation(),
         ...ctx,
         ts: new Date().toISOString(),
       }),

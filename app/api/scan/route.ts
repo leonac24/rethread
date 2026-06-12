@@ -9,6 +9,7 @@ import { MAX_UPLOAD_FILES, MAX_FILE_BYTES } from '@/lib/config';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { RouteOption, ScanResult } from '@/types/garment';
 import { prioritizeRoutesByCondition } from '@/lib/route-utils';
+import { traced } from '@/lib/tracer';
 
 // ─── File validation ──────────────────────────────────────────────────────────
 // Validate image by magic bytes — file.type is user-controlled and can be forged
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    return await handleScan(request, reqLog, traceId);
+    return await traced('scan.request', { traceId, ip }, () => handleScan(request, reqLog, traceId));
   } catch (err) {
     reqLog.error('Unhandled scan error', err, { stage: 'scan' });
     const message = err instanceof Error ? err.message : 'Internal server error';

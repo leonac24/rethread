@@ -3,6 +3,7 @@
 // missing, malformed, or expired. Callers decide whether to reject or allow anonymous.
 
 import { adminAuth } from '@/lib/firebase/admin';
+import { traced } from '@/lib/tracer';
 
 export type VerifiedUser = {
   uid: string;
@@ -18,11 +19,13 @@ export async function verifyBearerToken(
   const token = authHeader.slice(7).trim();
   if (!token) return null;
 
-  try {
-    const decoded = await adminAuth().verifyIdToken(token);
-    return { uid: decoded.uid, email: decoded.email };
-  } catch {
-    // Invalid, expired, or revoked token — treat as unauthenticated
-    return null;
-  }
+  return traced('auth.verify_token', {}, async () => {
+    try {
+      const decoded = await adminAuth().verifyIdToken(token);
+      return { uid: decoded.uid, email: decoded.email };
+    } catch {
+      // Invalid, expired, or revoked token — treat as unauthenticated
+      return null;
+    }
+  });
 }

@@ -1,5 +1,6 @@
 import type { RouteKind, RouteOption } from '@/types/garment';
 import { log } from '@/lib/logger';
+import { traced } from '@/lib/tracer';
 
 // Maps + Places — nearest repair / resale / donation for the garment.
 // Uses Places API (New) searchText with locationBias for distance-ranked results.
@@ -64,6 +65,7 @@ async function nearest(
   category: string | null,
   apiKey: string,
 ): Promise<RouteOption> {
+  return traced('scan.places_routes', { kind, lat, lng }, async () => {
   const res = await fetch(SEARCH_URL, {
     method: 'POST',
     signal: AbortSignal.timeout(8_000),
@@ -115,6 +117,7 @@ async function nearest(
     rating: place.rating,
     accepts_item: acceptsItem(kind, category, place.types ?? []),
   };
+  });
 }
 
 function todayIndex(): number {

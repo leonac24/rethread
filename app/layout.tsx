@@ -3,6 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono, Architects_Daughter } from 'next/font/
 import './globals.css';
 import { AuthProvider } from '@/lib/firebase/auth-context';
 import Header from '@/components/header';
+import DatadogRum from '@/components/datadog-rum';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -46,6 +47,7 @@ export default function RootLayout({
     >
       <body>
         <AuthProvider>
+          <DatadogRum />
           <Header />
           {children}
         </AuthProvider>
