@@ -15,6 +15,8 @@ import {
 import type { OutcomeAction, RouteOption, ScanResult } from '@/types/garment';
 import { OutcomeSection } from '@/components/outcome-section';
 import { LoadingScreen } from '@/components/loading-screen';
+import { GradeBadge } from '@/components/grade-badge';
+import { ScoreBreakdown } from '@/components/score-breakdown';
 import { useAuth } from '@/lib/firebase/auth-context';
 
 function truncate(text: string, maxWords: number): string {
@@ -290,6 +292,47 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
 
         {data && (
           <>
+            {/* ── Grade Hero ───────────────────────────────────────── */}
+            {data.result.garment_score && (() => {
+              const gs = data.result.garment_score!;
+              const category = data.result.garment.category;
+              const label = category ?? 'garment';
+              const verdict =
+                gs.score >= 65
+                  ? `Better than most ${label}s`
+                  : gs.score >= 50
+                    ? `Typical impact for a ${label}`
+                    : 'Higher impact than typical';
+
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.25 }}
+                  transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <Card>
+                    <SectionLabel>Rethread Grade</SectionLabel>
+                    <div className="flex items-start gap-6">
+                      <GradeBadge grade={gs.grade} score={gs.score} size="lg" />
+                      <div className="flex-1 min-w-0 pt-1">
+                        <p className="text-[20px] font-semibold text-ink leading-snug">
+                          {verdict}
+                        </p>
+                        <div className="mt-4">
+                          <ScoreBreakdown
+                            subScores={gs.subScores}
+                            confidence={gs.confidence}
+                            provenance={data.result.garment.provenance}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })()}
+
             {/* ── Garment Hero + Fiber Composition row ─────────────── */}
             <div
               className={
@@ -356,8 +399,16 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                 <div className="flex-1 min-w-0">
                   <p className="text-[29px] font-bold text-ink leading-tight">
                     {data.result.garment.category ?? 'Unknown'}
+                    {data.result.garment.provenance?.category === 'inferred' && (
+                      <span className="ml-2 text-[13px] font-normal text-ink-faint align-middle">· estimated</span>
+                    )}
                   </p>
-                  <p className="text-[16px] text-ink-muted mt-0.5">{data.result.garment.brand ?? 'Unknown brand'}</p>
+                  <p className="text-[16px] text-ink-muted mt-0.5">
+                    {data.result.garment.brand ?? 'Unknown brand'}
+                    {data.result.garment.provenance?.brand === 'inferred' && (
+                      <span className="ml-1.5 text-[13px] text-ink-faint">· estimated</span>
+                    )}
+                  </p>
 
                   {data.result.fti ? (() => {
                     const { score, year } = data.result.fti!;
@@ -416,7 +467,12 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint flex-shrink-0">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
                       </svg>
-                      <p className="text-[15px] text-ink-muted">Made in <span className="text-ink font-medium">{data.result.garment.origin}</span></p>
+                      <p className="text-[15px] text-ink-muted">
+                        Made in <span className="text-ink font-medium">{data.result.garment.origin}</span>
+                        {data.result.garment.provenance?.origin === 'inferred' && (
+                          <span className="ml-1.5 text-[13px] text-ink-faint">· estimated</span>
+                        )}
+                      </p>
                     </div>
                   )}
 
