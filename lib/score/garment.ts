@@ -67,7 +67,7 @@ function materialsScore(fibers: Fiber[], category: string | null): number {
 
 function manufacturingScore(origin: string | null, dyeRisk?: number): number | null {
   const o = originScore(origin);
-  const d = dyeRisk != null ? clamp(100 - ((dyeRisk - 1) * 100) / 9) : null;
+  const d = (dyeRisk != null && Number.isFinite(dyeRisk)) ? clamp(100 - ((dyeRisk - 1) * 100) / 9) : null;
   if (o === null && d === null) return null;
   if (o === null) return d;
   if (d === null) return o;
@@ -84,7 +84,7 @@ function endOfLifeScore(fibers: Fiber[]): number {
     .filter((f) => RECYCLED.has(norm(f.material)))
     .reduce((s, f) => s + f.percentage, 0);
   const elastanePct = fibers
-    .filter((f) => norm(f.material) === 'elastane' || norm(f.material) === 'spandex')
+    .filter((f) => norm(f.material) === 'elastane' || norm(f.material) === 'spandex' || norm(f.material) === 'lycra')
     .reduce((s, f) => s + f.percentage, 0);
   const dominant = Math.max(...fibers.map((f) => f.percentage));
 
@@ -115,7 +115,8 @@ export function computeGarmentScore(input: GarmentScoreInput): GarmentScore {
     acc += v * WEIGHTS[key];
     weightSum += WEIGHTS[key];
   }
-  const rawScore = weightSum > 0 ? acc / weightSum : 0;
+  // materials and endOfLife are always present, so weightSum is always > 0.
+  const rawScore = acc / weightSum;
   const score = Math.round(rawScore * 10) / 10;
 
   const p = input.provenance;

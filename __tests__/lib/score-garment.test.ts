@@ -1,14 +1,31 @@
 import { describe, expect, test } from 'bun:test';
 import { computeGarmentScore, gradeForScore } from '@/lib/score/garment';
+import { originTier } from '@/lib/score/origin-tiers';
 
 describe('gradeForScore', () => {
   test('grade bands', () => {
     expect(gradeForScore(80)).toBe('A');
     expect(gradeForScore(79.9)).toBe('B');
     expect(gradeForScore(65)).toBe('B');
+    expect(gradeForScore(64.9)).toBe('C');
     expect(gradeForScore(50)).toBe('C');
+    expect(gradeForScore(49.9)).toBe('D');
     expect(gradeForScore(35)).toBe('D');
     expect(gradeForScore(34.9)).toBe('F');
+  });
+});
+
+describe('originTier', () => {
+  test('ukraine is not tier 1 (substring false positive guard)', () => {
+    expect(originTier('ukraine')).toBeNull();
+  });
+
+  test('made in portugal is tier 1', () => {
+    expect(originTier('made in portugal')).toBe(1);
+  });
+
+  test('Made in CHINA is tier 3 (case-insensitive)', () => {
+    expect(originTier('Made in CHINA')).toBe(3);
   });
 });
 
@@ -82,5 +99,26 @@ describe('computeGarmentScore', () => {
       provenance: { fibers: 'inferred', origin: 'stated', category: 'stated' },
     });
     expect(s.confidence).toBe('low');
+  });
+
+  test('NaN dyeRisk yields finite score and manufacturing equals origin-only score', () => {
+    const s = computeGarmentScore({ ...linenTee, dyeRisk: NaN });
+    expect(Number.isFinite(s.score)).toBe(true);
+    // portugal is tier 1 -> originScore = 85; NaN dyeRisk is ignored so manufacturing = 85
+    expect(s.subScores.manufacturing).toBe(85);
+  });
+
+  test('lycra endOfLife penalty: 95% cotton / 5% lycra scores lower than 100% cotton', () => {
+    const pure = computeGarmentScore({
+      category: 't-shirt',
+      fibers: [{ material: 'cotton', percentage: 100 }],
+      origin: null,
+    }).subScores.endOfLife;
+    const withLycra = computeGarmentScore({
+      category: 't-shirt',
+      fibers: [{ material: 'cotton', percentage: 95 }, { material: 'lycra', percentage: 5 }],
+      origin: null,
+    }).subScores.endOfLife;
+    expect(withLycra).toBeLessThan(pure);
   });
 });
