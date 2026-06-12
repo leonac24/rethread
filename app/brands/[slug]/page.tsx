@@ -94,6 +94,8 @@ function hostname(url: string): string {
   }
 }
 
+const isSafeUrl = (u: string) => /^https?:\/\//i.test(u);
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -102,8 +104,15 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
+  let name = slug;
+  try {
+    const brand = await getBrand(slug);
+    name = brand?.name ?? slug;
+  } catch {
+    // fall back to slug
+  }
   return {
-    title: `${slug} brand report — Rethread`,
+    title: `${name} brand report — Rethread`,
   };
 }
 
@@ -194,14 +203,16 @@ export default async function BrandDetailPage({ params }: Props) {
                 {brand.fti.score}/100 ({brand.fti.year})
               </span>
             </span>
-            <a
-              href={brand.fti.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[12px] text-accent-500 hover:underline underline-offset-2"
-            >
-              ↗ source
-            </a>
+            {isSafeUrl(brand.fti.url) && (
+              <a
+                href={brand.fti.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[12px] text-accent-500 hover:underline underline-offset-2"
+              >
+                ↗ source
+              </a>
+            )}
           </div>
         )}
 
@@ -211,7 +222,7 @@ export default async function BrandDetailPage({ params }: Props) {
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted mb-2">
               Summary
             </p>
-            <p className="text-[15px] leading-[22px] text-ink">
+            <p className="text-base leading-[22px] text-ink">
               {brand.dossier.summary}
             </p>
           </section>
@@ -249,14 +260,18 @@ export default async function BrandDetailPage({ params }: Props) {
                   <span className="text-ink-faint mt-[2px] flex-shrink-0">·</span>
                   <span>
                     <span className="text-ink-muted">{c.claim} — </span>
-                    <a
-                      href={c.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-accent-500 hover:underline underline-offset-2"
-                    >
-                      {hostname(c.url)}
-                    </a>
+                    {isSafeUrl(c.url) ? (
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-accent-500 hover:underline underline-offset-2"
+                      >
+                        {hostname(c.url)}
+                      </a>
+                    ) : (
+                      <span className="text-ink-muted">{hostname(c.url)}</span>
+                    )}
                   </span>
                 </li>
               ))}
@@ -277,7 +292,7 @@ export default async function BrandDetailPage({ params }: Props) {
             Is this your brand?
           </p>
           <Link
-            href={`/partners/apply?brand=${brand.slug}`}
+            href={`/partners/apply?brand=${encodeURIComponent(brand.slug)}`}
             className="inline-flex items-center justify-center h-10 px-5 rounded-md bg-ink text-bg text-[13px] font-medium transition-transform duration-[120ms] ease-out active:scale-[0.96] hover:opacity-90 whitespace-nowrap"
           >
             Claim it
