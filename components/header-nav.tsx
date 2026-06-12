@@ -15,6 +15,9 @@ export function HeaderNav() {
         <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
           Brands
         </Link>
+        <Link href="/verification" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+          Verification
+        </Link>
         <Link href="/partners/apply" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
           For Businesses
         </Link>
@@ -28,6 +31,9 @@ export function HeaderNav() {
       <div className="flex items-center gap-4 mr-5">
         <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
           Brands
+        </Link>
+        <Link href="/verification" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+          Verification
         </Link>
         <Link href="/partners/apply" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
           For Businesses
@@ -51,6 +57,9 @@ export function HeaderNav() {
     <div className="mr-5 flex items-center gap-4">
       <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
         Brands
+      </Link>
+      <Link href="/verification" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+        Verification
       </Link>
       <Link href="/partners/apply" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
         For Businesses

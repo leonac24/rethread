@@ -75,5 +75,5 @@ export type ScanResult = {
   landfill_impact?: LandfillImpact;
   fti?: FashionTransparencyIndex;
   garment_score?: GarmentScore;
-  brand_page?: { slug: string; name: string; grade: string; score: number; status: string };
+  brand_page?: { slug: string; name: string; grade: string; score: number; status: string; fti?: { score: number; year: number; url: string } };
 };

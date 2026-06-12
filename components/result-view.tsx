@@ -412,8 +412,45 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                     )}
                   </p>
 
-                  {data.result.fti ? (() => {
-                    const { score, year } = data.result.fti!;
+                  {/* ── Brand Report Card ── */}
+                  {data.result.brand_page && (() => {
+                    const bp = data.result.brand_page;
+                    const statusLabel = bp.status === 'unclaimed' ? 'AI-researched' : bp.status === 'claimed' ? 'Brand-claimed' : 'Verified';
+                    return (
+                      <div className="mt-3 rounded-xl bg-bg px-3 py-2.5 flex items-center gap-3">
+                        <GradeBadge grade={bp.grade} score={bp.score} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-semibold text-ink leading-tight truncate">{bp.name}</p>
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold mt-0.5"
+                            style={{
+                              backgroundColor: 'color-mix(in srgb, var(--accent-500) 10%, transparent)',
+                              color: 'var(--accent-700)',
+                            }}
+                          >
+                            {statusLabel}
+                          </span>
+                        </div>
+                        <Link
+                          href={`/brands/${bp.slug}`}
+                          className="flex-shrink-0 text-[12px] font-medium text-ink-muted hover:text-ink underline underline-offset-2 transition-colors whitespace-nowrap"
+                        >
+                          View report card →
+                        </Link>
+                      </div>
+                    );
+                  })()}
+
+                  {(() => {
+                    const fti = data.result.brand_page?.fti ?? data.result.fti;
+                    if (!fti) {
+                      return (
+                        <p className="text-[13px] text-ink-faint mt-1.5 italic">
+                          No Fashion Transparency Index available for this brand.
+                        </p>
+                      );
+                    }
+                    const { score, year, url } = fti;
                     const color = score >= 61 ? '#5E8B6C' : score >= 41 ? '#C8A24A' : score >= 21 ? '#B07D2E' : '#B23A2B';
                     const label = score >= 61 ? 'High' : score >= 41 ? 'Moderate' : score >= 21 ? 'Low' : 'Very Low';
                     const explanation = score >= 61
@@ -437,22 +474,18 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                             Transparency {score}/100 · {label}
                           </div>
                           <a
-                          href={data.result.fti!.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[12px] text-ink-faint hover:underline underline-offset-2"
-                        >
-                          FTI {year} ↗
-                        </a>
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[12px] text-ink-faint hover:underline underline-offset-2"
+                          >
+                            FTI {year} ↗
+                          </a>
                         </div>
                         <p className="text-[13px] leading-[16px] text-ink-muted">{explanation}</p>
                       </div>
                     );
-                  })() : (
-                    <p className="text-[13px] text-ink-faint mt-1.5 italic">
-                      No Fashion Transparency Index available for this brand.
-                    </p>
-                  )}
+                  })()}
 
                   {data.result.garment.color && (
                     <div className="flex items-center gap-2 mt-3">

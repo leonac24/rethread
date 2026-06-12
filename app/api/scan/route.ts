@@ -254,7 +254,7 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     garment_score,
     ...(landfill_impact ? { landfill_impact } : {}),
     ...(brandRecord
-      ? { brand_page: { slug: brandRecord.slug, name: brandRecord.name, grade: brandRecord.grade, score: brandRecord.score, status: brandRecord.status } }
+      ? { brand_page: { slug: brandRecord.slug, name: brandRecord.name, grade: brandRecord.grade, score: brandRecord.score, status: brandRecord.status, ...(brandRecord.fti ? { fti: brandRecord.fti } : {}) } }
       : {}),
   };
 
