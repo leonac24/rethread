@@ -15,6 +15,7 @@ mock.module('../lib/config', () => ({
   BRAND_CACHE_TTL_MS: 60 * 60 * 1000,
   GEMINI_TIMEOUT_MS: 20_000,
   BIGQUERY_TIMEOUT_MS: 10_000,
+  PER_REDEMPTION_USD: 0.75,
 }));
 
 // Stub fs/promises so tests don't hit the real filesystem

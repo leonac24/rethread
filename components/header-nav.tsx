@@ -15,6 +15,9 @@ export function HeaderNav() {
         <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
           Brands
         </Link>
+        <Link href="/partners/apply" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+          For Businesses
+        </Link>
         <div className="w-8 h-8 rounded-full bg-surface-sunk animate-pulse" />
       </div>
     );
@@ -25,6 +28,9 @@ export function HeaderNav() {
       <div className="flex items-center gap-4 mr-5">
         <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
           Brands
+        </Link>
+        <Link href="/partners/apply" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+          For Businesses
         </Link>
         <a
           href="/login"
@@ -45,6 +51,9 @@ export function HeaderNav() {
     <div className="mr-5 flex items-center gap-4">
       <Link href="/brands" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
         Brands
+      </Link>
+      <Link href="/partners/apply" className="text-[14px] font-medium text-ink-muted hover:text-ink transition-colors">
+        For Businesses
       </Link>
       {/* Avatar → profile */}
       <a href="/profile" className="flex items-center gap-2 group">

@@ -20,3 +20,6 @@ export const BIGQUERY_TIMEOUT_MS = 10_000;
 
 // ─── Gemini ────────────────────────────────────────────────────────────────
 export const GEMINI_TIMEOUT_MS = 20_000;
+
+// ─── Partner billing ───────────────────────────────────────────────────────
+export const PER_REDEMPTION_USD = 0.75; // invoiced per confirmed redemption (v1 manual billing)
