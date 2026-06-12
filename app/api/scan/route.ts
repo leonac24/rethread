@@ -1,13 +1,12 @@
-import { analyzeGarmentImage, computeCost, computeLandfillImpact, parseLabelWithGemini } from '@/lib/google/gemini';
+import { computeCost, computeLandfillImpact, ingestGarment } from '@/lib/google/gemini';
 import { getBrandContext } from '@/lib/google/bigquery';
-import { getFashionTransparencyScore } from '@/lib/wikirate';
 import { findRoutes } from '@/lib/google/places';
-import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/vision';
 import { saveScanResult } from '@/lib/scan-store';
 import { createRequestLogger } from '@/lib/logger';
 import { MAX_UPLOAD_FILES, MAX_FILE_BYTES } from '@/lib/config';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { RouteOption, ScanResult } from '@/types/garment';
+import { computeGarmentScore } from '@/lib/score/garment';
 import { prioritizeRoutesByCondition } from '@/lib/route-utils';
 
 // ─── File validation ──────────────────────────────────────────────────────────
@@ -133,50 +132,28 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
 
   reqLog.info('Starting scan pipeline', { stage: 'ingest', labelCount: labelBuffers.length, hasGarmentPhoto: !!garmentPhotoBuffer });
 
-  // [INGEST] OCR all label photos + optionally analyze garment image — run in parallel
-  const [texts, imageAnalysis] = await Promise.all([
-    Promise.all(
-      labelBuffers.map((buf) =>
-        readClothingLabelText(buf).catch((err) => {
-          reqLog.error('Vision OCR failed for a label photo', err, { stage: 'ingest' });
-          return '';
-        }),
-      ),
-    ),
-    garmentPhotoBuffer
-      ? analyzeGarmentImage(garmentPhotoBuffer).catch((err) => {
-          reqLog.error('Garment image analysis failed', err, { stage: 'ingest' });
-          return null;
-        })
-      : Promise.resolve(null),
-  ]);
-
-  const text = texts.join('\n');
-
-  // Use Gemini to parse the label — handles OCR noise, multi-language text, and layout variations.
-  // Fall back to the regex parser if Gemini fails.
-  let parsed: Awaited<ReturnType<typeof parseLabelWithGemini>>;
+  // [INGEST] Single multimodal Gemini call: reads all label photos plus the optional
+  // garment photo and returns structured garment data with per-field provenance.
+  let ingest: Awaited<ReturnType<typeof ingestGarment>>;
   try {
-    parsed = await parseLabelWithGemini(text);
-    reqLog.info('Label parsed via Gemini', { stage: 'ingest', brand: parsed.brand, fiberCount: parsed.fibers.length });
+    ingest = await ingestGarment(labelBuffers, garmentPhotoBuffer);
   } catch (err) {
-    reqLog.warn('Gemini label parse failed — falling back to regex parser', { stage: 'ingest', err: String(err) });
-    const fallback = parseClothingLabelText(text);
-    parsed = {
-      brand:    fallback.brand ?? null,
-      fibers:   fallback.fibers ?? [],
-      origin:   fallback.origin ?? null,
-      category: fallback.category ?? null,
-    };
+    reqLog.error('Gemini ingest failed', err, { stage: 'ingest' });
+    return Response.json(
+      { error: 'Could not read the label. Try a clearer photo.' },
+      { status: 422, headers: { 'X-Trace-Id': traceId } },
+    );
   }
 
   const garment: ScanResult['garment'] = {
-    fibers: parsed.fibers,
-    origin: parsed.origin,
-    category: parsed.category ?? imageAnalysis?.category ?? null,
-    ...(parsed.brand ? { brand: parsed.brand } : {}),
-    ...(imageAnalysis?.color ? { color: imageAnalysis.color } : {}),
-    ...(imageAnalysis?.condition ? { condition: imageAnalysis.condition } : {}),
+    fibers: ingest.fibers,
+    origin: ingest.origin,
+    category: ingest.category,
+    ...(ingest.brand ? { brand: ingest.brand } : {}),
+    ...(ingest.color ? { color: ingest.color } : {}),
+    ...(ingest.condition ? { condition: ingest.condition } : {}),
+    provenance: ingest.provenance,
+    ingest_confidence: ingest.confidence,
   };
 
   reqLog.info('Ingest complete', { stage: 'ingest', brand: garment.brand ?? null, category: garment.category });
@@ -206,12 +183,6 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     reqLog.warn('No coords on request — using fallback routes', { stage: 'route' });
   }
 
-  // Fire all external lookups in parallel — FTI and brand context don't gate each other
-  const ftiPromise = getFashionTransparencyScore(garment.brand ?? '').catch((err) => {
-    reqLog.warn('WikiRate FTI lookup failed', { stage: 'cost', err: String(err) });
-    return null;
-  });
-
   const costPromise: Promise<ScanResult['cost']> = getBrandContext(garment.brand ?? '')
     .catch((err) => {
       reqLog.warn('BigQuery brand context failed, proceeding without it', { stage: 'cost', err: err instanceof Error ? err.message : String(err) });
@@ -237,20 +208,28 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     return undefined;
   });
 
-  const [cost, routes, landfill_impact, fti] = await Promise.all([costPromise, routesPromise, landfillPromise, ftiPromise]);
+  const [cost, routes, landfill_impact] = await Promise.all([costPromise, routesPromise, landfillPromise]);
+
+  const garment_score = computeGarmentScore({
+    category: garment.category,
+    fibers: garment.fibers,
+    origin: garment.origin,
+    dyeRisk: cost.dye_pollution_score,
+    provenance: garment.provenance,
+  });
 
   const result: ScanResult = {
     id: crypto.randomUUID(),
     garment,
     cost,
     routes: prioritizeRoutesByCondition(routes, garment.condition),
+    garment_score,
     ...(landfill_impact ? { landfill_impact } : {}),
-    ...(fti ? { fti } : {}),
   };
 
-  const id = await saveScanResult(text, result);
+  const id = await saveScanResult('', result);
 
   reqLog.info('Scan complete', { stage: 'scan', id });
 
-  return Response.json({ id, text, result }, { headers: { 'X-Trace-Id': traceId } });
+  return Response.json({ id, text: '', result }, { headers: { 'X-Trace-Id': traceId } });
 }

@@ -1,3 +1,5 @@
+import type { GarmentScore } from '@/lib/score/garment';
+
 export type Fiber = {
   material: string;
   percentage: number;
@@ -69,4 +71,6 @@ export type ScanResult = {
   routes: [RouteOption, RouteOption, RouteOption];
   landfill_impact?: LandfillImpact;
   fti?: FashionTransparencyIndex;
+  garment_score?: GarmentScore;
+  brand_page?: { slug: string; name: string; grade: string; score: number; status: string };
 };
