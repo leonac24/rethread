@@ -1,0 +1,92 @@
+// Rethread — Firestore Security Rules
+// deploy with: firebase deploy --only firestore:rules
+//
+// BEFORE FIRST DEPLOY: reconcile the users/* section against the rules
+// currently active in the Firebase console. This file is the intended
+// source of truth going forward.
+//
+// Architecture note: ALL Firestore reads and writes in this application go
+// through server-side API routes using the Admin SDK (lib/firebase/admin.ts).
+// The client SDK (lib/firebase/client.ts) is initialised for Firebase Auth
+// only — getAuth() and getStorage() — and never calls getFirestore().
+// Profile, closet, scan, partner, referral, and leaderboard data all flow
+// through Next.js API routes that verify a Firebase ID token first, then
+// access Firestore with Admin credentials.
+//
+// As a result these rules are intentionally restrictive: they deny all
+// direct client access except for the owner-read on users/{uid}, which is
+// retained as a safety net should future client-side reads be added. All
+// mutations that currently happen are Admin SDK writes and are not subject
+// to these rules.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Users ──────────────────────────────────────────────────────────
+    // The user document and its scans subcollection are only readable by
+    // the document owner. All writes go through the Admin SDK (API routes
+    // /api/auth/callback, /api/user/scans, /api/user/scans/{id}).
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+
+      match /scans/{scanId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+    }
+
+    // ── Brands ─────────────────────────────────────────────────────────
+    // Brand profiles are public read. All writes are performed by the
+    // Admin SDK (seed scripts, research pipeline) and are never client-
+    // initiated.
+    match /brands/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ── Partners ───────────────────────────────────────────────────────
+    // A partner record is readable only by the owning user (uid matches
+    // the document ID). All writes — including application creation and
+    // status updates — go through /api/partners/* using the Admin SDK.
+    match /partners/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // ── Referrals ──────────────────────────────────────────────────────
+    // Referral codes are server-only. Created and redeemed exclusively
+    // through /api/referrals/* via the Admin SDK.
+    match /referrals/{code} {
+      allow read, write: if false;
+    }
+
+    // ── Registry ───────────────────────────────────────────────────────
+    // Local partner registry used by the routing pipeline. Server-only.
+    match /registry/{id} {
+      allow read, write: if false;
+    }
+
+    // ── Brand candidates ───────────────────────────────────────────────
+    // Internal pipeline collection for brands under research. Server-only.
+    match /brand_candidates/{id} {
+      allow read, write: if false;
+    }
+
+    // ── Outcomes ───────────────────────────────────────────────────────
+    // Outcome records written by /api/scan/{id}/outcome via Admin SDK.
+    // Server-only.
+    match /outcomes/{id} {
+      allow read, write: if false;
+    }
+
+    // ── Default deny ───────────────────────────────────────────────────
+    // Any collection not matched above is denied to all clients.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

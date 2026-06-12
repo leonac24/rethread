@@ -21,34 +21,32 @@ export default function Home() {
               className="font-display text-[34px] leading-[36px] md:text-[48px] md:leading-[52px] tracking-[-0.02em] text-ink"
               style={{ fontWeight: 400 }}
             >
-              Scan a tag.
+              Check before you buy.
               <br />
-              See the true cost.
+              <span className="text-accent-700">Route it when</span>
               <br />
-              <span className="text-accent-700">Give the garment</span>
-              <br />
-              <span className="text-accent-700">another life.</span>
+              <span className="text-accent-700">you&apos;re done.</span>
             </h1>
 
             <p className="mt-10 max-w-[52ch] text-[19px] leading-[28px] text-ink-muted">
-              One photo of a care label becomes a complete environmental
-              footprint and three concrete next steps — one repair, one resale,
-              one donation — all within walking distance.
+              Scan a care label for an instant A&ndash;F impact grade. Browse brand
+              report cards. Find verified local spots to repair, resell, or recycle
+              &mdash; with a discount.
             </p>
 
-            <div className="mt-12 flex items-center gap-6">
+            <div className="mt-12 flex items-center gap-4 flex-wrap">
               <Link
                 href="/scan"
                 className="inline-flex items-center justify-center h-12 px-8 rounded-md bg-ink text-bg text-[16px] font-medium transition-transform duration-[120ms] ease-out active:scale-[0.96]"
               >
-                Begin scan
+                Scan a tag
               </Link>
-              <ScrollToButton
-                targetId="how"
-                className="text-[16px] text-ink-muted hover:text-ink hover:underline underline-offset-4 cursor-pointer"
+              <Link
+                href="/brands"
+                className="inline-flex items-center justify-center h-12 px-8 rounded-md border border-rule text-ink text-[16px] font-medium transition-colors hover:bg-surface-sunk"
               >
-                How it works
-              </ScrollToButton>
+                Browse brands
+              </Link>
             </div>
           </div>
 
@@ -77,9 +75,9 @@ export default function Home() {
                   style={{ backgroundImage: 'url(/images/paper.webp)', backgroundSize: 'cover', backgroundPosition: 'center' }}
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6">
-                    <span className="text-[10px] sm:text-[13px] md:text-[16px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-4">Ingest</span>
-                    <h2 className="font-display text-[16px] leading-[20px] sm:text-[24px] sm:leading-[30px] md:text-[34px] md:leading-[40px] text-ink mb-4" style={{ fontWeight: 500 }}>What is this garment?</h2>
-                    <p className="text-[11px] leading-[16px] sm:text-[15px] sm:leading-[22px] md:text-[19px] md:leading-[28px] text-ink-muted">Cloud Vision reads the care label. Fibers, origin, category, pulled out in about a second.</p>
+                    <span className="text-[10px] sm:text-[13px] md:text-[16px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-4">Grade</span>
+                    <h2 className="font-display text-[16px] leading-[20px] sm:text-[24px] sm:leading-[30px] md:text-[34px] md:leading-[40px] text-ink mb-4" style={{ fontWeight: 500 }}>Instant A&ndash;F impact grade</h2>
+                    <p className="text-[11px] leading-[16px] sm:text-[15px] sm:leading-[22px] md:text-[19px] md:leading-[28px] text-ink-muted">Scan a care label. Fibers, origin, and brand data combine into a single grade in about a second.</p>
                   </div>
                 </article>
               </div>
@@ -96,9 +94,9 @@ export default function Home() {
                   style={{ backgroundImage: 'url(/images/paper.webp)', backgroundSize: 'cover', backgroundPosition: 'center' }}
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6">
-                    <span className="text-[10px] sm:text-[13px] md:text-[16px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-4">Cost</span>
-                    <h2 className="font-display text-[16px] leading-[20px] sm:text-[24px] sm:leading-[30px] md:text-[34px] md:leading-[40px] text-ink mb-4" style={{ fontWeight: 500 }}>What did it really take?</h2>
-                    <p className="text-[11px] leading-[16px] sm:text-[15px] sm:leading-[22px] md:text-[19px] md:leading-[28px] text-ink-muted">Gemini estimates water, CO₂, and dye pollution using brand-level sustainability data.</p>
+                    <span className="text-[10px] sm:text-[13px] md:text-[16px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-4">Brands</span>
+                    <h2 className="font-display text-[16px] leading-[20px] sm:text-[24px] sm:leading-[30px] md:text-[34px] md:leading-[40px] text-ink mb-4" style={{ fontWeight: 500 }}>Brand report cards</h2>
+                    <p className="text-[11px] leading-[16px] sm:text-[15px] sm:leading-[22px] md:text-[19px] md:leading-[28px] text-ink-muted">AI-researched profiles covering water, CO₂, supply chain transparency, and certifications — updated as new data emerges.</p>
                   </div>
                 </article>
               </div>
@@ -116,8 +114,8 @@ export default function Home() {
                 >
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6">
                     <span className="text-[10px] sm:text-[13px] md:text-[16px] font-medium tracking-[0.2em] uppercase text-ink-muted mb-4">Route</span>
-                    <h2 className="font-display text-[16px] leading-[20px] sm:text-[24px] sm:leading-[30px] md:text-[34px] md:leading-[40px] text-ink mb-4" style={{ fontWeight: 500 }}>Where does it go next?</h2>
-                    <p className="text-[11px] leading-[16px] sm:text-[15px] sm:leading-[22px] md:text-[19px] md:leading-[28px] text-ink-muted">Maps finds one repair shop, one resale option, one donation center, all close to you.</p>
+                    <h2 className="font-display text-[16px] leading-[20px] sm:text-[24px] sm:leading-[30px] md:text-[34px] md:leading-[40px] text-ink mb-4" style={{ fontWeight: 500 }}>Verified local spots with a discount</h2>
+                    <p className="text-[11px] leading-[16px] sm:text-[15px] sm:leading-[22px] md:text-[19px] md:leading-[28px] text-ink-muted">Repair, resell, or recycle near you. Verified partners offer Rethread members a discount on every referral.</p>
                   </div>
                 </article>
               </div>
