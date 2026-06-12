@@ -23,7 +23,7 @@ export async function resolveBrand(name: string): Promise<BrandRecord | null> {
   const byAlias = await db().collection('brands').where('aliases', 'array-contains', slug).limit(1).get();
   if (!byAlias.empty) return byAlias.docs[0].data() as BrandRecord;
   await db().collection('brand_candidates').doc(slug).set(
-    { name, slug, seen: FieldValue.increment(1), lastSeenAt: FieldValue.serverTimestamp() },
+    { name: name.slice(0, 100), slug, seen: FieldValue.increment(1), lastSeenAt: FieldValue.serverTimestamp() },
     { merge: true },
   );
   return null;

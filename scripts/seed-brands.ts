@@ -75,7 +75,8 @@ async function fetchDossier(brandName: string): Promise<string> {
     }
     return res.json() as Promise<GeminiResponse>;
   }, 3, 'Gemini-dossier');
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.map((p) => p.text ?? '').join('');
   if (!text) throw new Error('Gemini dossier returned no content');
   return text;
 }
@@ -148,7 +149,33 @@ async function extractStructured(dossierText: string): Promise<ExtractedDossier>
 
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   if (!rawText) throw new Error('Gemini extract returned no content');
-  return JSON.parse(rawText) as ExtractedDossier;
+  const x = JSON.parse(rawText) as Record<string, unknown>;
+  const summary = String(x.summary ?? '');
+  const rawCitations = Array.isArray(x.citations) ? x.citations : [];
+  const citations = (rawCitations as unknown[])
+    .filter(
+      (c): c is { claim: string; url: string } =>
+        typeof c === 'object' && c !== null &&
+        typeof (c as Record<string, unknown>).claim === 'string' &&
+        typeof (c as Record<string, unknown>).url === 'string' &&
+        ((c as Record<string, unknown>).url as string).startsWith('http'),
+    )
+    .slice(0, 20)
+    .map((c) => ({ claim: c.claim.slice(0, 200), url: c.url }));
+  const rawCerts = Array.isArray(x.certifications) ? x.certifications : [];
+  const certifications = (rawCerts as unknown[])
+    .filter((c): c is string | number | boolean | null => c !== null && c !== undefined)
+    .map((c) => String(c))
+    .filter(Boolean)
+    .slice(0, 15);
+  return {
+    summary,
+    citations,
+    certifications,
+    transparency: typeof x.transparency === 'number' ? x.transparency : 0,
+    laborSupplyChain: typeof x.laborSupplyChain === 'number' ? x.laborSupplyChain : 0,
+    productImpactBaseline: typeof x.productImpactBaseline === 'number' ? x.productImpactBaseline : 0,
+  };
 }
 
 function clamp(n: number, min = 0, max = 100): number {
@@ -238,7 +265,7 @@ if (import.meta.main) {
       try {
         const ftiResult = await getFashionTransparencyScore(name);
         if (ftiResult) {
-          transparency = Math.round(0.5 * extracted.transparency + 0.5 * ftiResult.score);
+          transparency = clamp(Math.round(0.5 * clamp(extracted.transparency) + 0.5 * ftiResult.score));
           fti = { score: ftiResult.score, year: ftiResult.year, url: ftiResult.url };
         }
       } catch (err) {
