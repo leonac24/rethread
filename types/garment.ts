@@ -45,6 +45,9 @@ export type RouteOption = {
   hours?: string;
   rating?: number;
   accepts_item: boolean | null;
+  verified?: boolean;
+  partnerId?: string;
+  discountPct?: number;
 };
 
 export type OutcomeAction = 'throw_away' | 'repair' | 'list' | 'donate';

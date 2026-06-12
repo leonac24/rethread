@@ -17,6 +17,7 @@ import { OutcomeSection } from '@/components/outcome-section';
 import { LoadingScreen } from '@/components/loading-screen';
 import { GradeBadge } from '@/components/grade-badge';
 import { ScoreBreakdown } from '@/components/score-breakdown';
+import { ReferralQr } from '@/components/referral-qr';
 import { useAuth } from '@/lib/firebase/auth-context';
 
 function truncate(text: string, maxWords: number): string {
@@ -721,7 +722,17 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                           {meta.icon}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[16px] font-semibold text-ink truncate">{route.name}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-[16px] font-semibold text-ink truncate">{route.name}</p>
+                            {route.verified && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold flex-shrink-0"
+                                style={{ backgroundColor: '#E8F0E6', color: '#5E8B6C' }}
+                              >
+                                rethread verified ✓
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[14px] text-ink-muted mt-0.5">{route.address}</p>
                           <p className="text-[14px] text-ink-faint mt-0.5">
                             {meta.label} · {(route.distance_km * 0.621371).toFixed(1)} mi
@@ -738,6 +749,16 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                           </a>
                         )}
                       </div>
+                      {route.verified && route.partnerId && (
+                        <div className="px-5 pb-4">
+                          <ReferralQr
+                            scanId={id}
+                            partnerId={route.partnerId}
+                            partnerName={route.name}
+                            discountPct={route.discountPct ?? 5}
+                          />
+                        </div>
+                      )}
                       {!isLast && <div className="mx-5 h-px bg-rule" />}
                     </div>
                   );

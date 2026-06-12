@@ -10,6 +10,8 @@ import { computeGarmentScore } from '@/lib/score/garment';
 import { prioritizeRoutesByCondition } from '@/lib/route-utils';
 import { resolveBrand, recordScanEvidence } from '@/lib/brands';
 import { upsertRegistryEntry } from '@/lib/registry';
+import { getVerifiedPartners } from '@/lib/partners-cache';
+import { applyVerifiedPartners } from '@/lib/partner-routes';
 
 // ─── File validation ──────────────────────────────────────────────────────────
 // Validate image by magic bytes — file.type is user-controlled and can be forged
@@ -165,6 +167,9 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
   const lngRaw = formData.get('lng');
 
   let routesPromise: Promise<ScanResult['routes']> = Promise.resolve(fallbackRoutes());
+  let hasValidCoords = false;
+  let validLat = 0;
+  let validLng = 0;
 
   if (typeof latRaw === 'string' && typeof lngRaw === 'string') {
     const lat = Number(latRaw);
@@ -175,6 +180,9 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     } else if (!isValidCoords(lat, lng)) {
       return Response.json({ error: 'lat/lng out of valid geographic range.' }, { status: 400, headers: { 'X-Trace-Id': traceId } });
     } else {
+      hasValidCoords = true;
+      validLat = lat;
+      validLng = lng;
       reqLog.info('Using provided coords for route lookup', { stage: 'route', lat, lng });
       routesPromise = findRoutes(lat, lng, garment.category).catch((err) => {
         reqLog.error('findRoutes failed', err, { stage: 'route' });
@@ -184,6 +192,13 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
   } else {
     reqLog.warn('No coords on request — using fallback routes', { stage: 'route' });
   }
+
+  const partnersPromise = hasValidCoords
+    ? getVerifiedPartners().catch((err) => {
+        reqLog.warn('partners fetch failed', { stage: 'route', err: String(err) });
+        return [];
+      })
+    : Promise.resolve([]);
 
   const costPromise: Promise<ScanResult['cost']> = getBrandContext(garment.brand ?? '')
     .catch((err) => {
@@ -212,7 +227,7 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
 
   const brandRecordPromise = garment.brand ? resolveBrand(garment.brand).catch((err) => { reqLog.warn('resolveBrand failed', { stage: 'brand', err: String(err) }); return null; }) : Promise.resolve(null);
 
-  const [cost, routes, landfill_impact, brandRecord] = await Promise.all([costPromise, routesPromise, landfillPromise, brandRecordPromise]);
+  const [cost, routes, landfill_impact, brandRecord, partners] = await Promise.all([costPromise, routesPromise, landfillPromise, brandRecordPromise, partnersPromise]);
 
   const garment_score = computeGarmentScore({
     category: garment.category,
@@ -226,11 +241,16 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
       : undefined,
   });
 
+  const prioritized = prioritizeRoutesByCondition(routes, garment.condition);
+  const finalRoutes = hasValidCoords && partners.length > 0
+    ? applyVerifiedPartners(prioritized, partners, validLat, validLng)
+    : prioritized;
+
   const result: ScanResult = {
     id: crypto.randomUUID(),
     garment,
     cost,
-    routes: prioritizeRoutesByCondition(routes, garment.condition),
+    routes: finalRoutes,
     garment_score,
     ...(landfill_impact ? { landfill_impact } : {}),
     ...(brandRecord
