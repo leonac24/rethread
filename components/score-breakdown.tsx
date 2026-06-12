@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import type { GarmentScore } from '@/lib/score/garment';
 import type { Garment } from '@/types/garment';
 
@@ -18,37 +18,51 @@ type BarRowProps = {
 };
 
 function barColor(value: number): string {
-  if (value >= 65) return '#5E8B6C'; // success
-  if (value >= 50) return '#6FA8CE'; // accent-500
-  if (value >= 35) return '#C8A24A'; // warning
-  return '#B23A2B'; // danger
+  if (value >= 65) return 'var(--success)';
+  if (value >= 50) return 'var(--accent-500)';
+  if (value >= 35) return 'var(--warning)';
+  if (value >= 20) return 'color-mix(in srgb, var(--warning) 60%, var(--danger) 40%)';
+  return 'var(--danger)';
 }
 
 function confidenceColor(conf: GarmentScore['confidence']): { bg: string; text: string } {
   switch (conf) {
     case 'high':
-      return { bg: '#5E8B6C18', text: '#5E8B6C' };
+      return {
+        bg: 'color-mix(in srgb, var(--success) 9%, transparent)',
+        text: 'var(--success)',
+      };
     case 'medium':
-      return { bg: '#C8A24A18', text: '#C8A24A' };
+      return {
+        bg: 'color-mix(in srgb, var(--warning) 9%, transparent)',
+        text: 'var(--warning)',
+      };
     case 'low':
     default:
-      return { bg: '#B23A2B18', text: '#B23A2B' };
+      return {
+        bg: 'color-mix(in srgb, var(--danger) 9%, transparent)',
+        text: 'var(--danger)',
+      };
   }
 }
 
 function BarRow({ label, value, inferred = false, index }: BarRowProps) {
+  const prefersReducedMotion = useReducedMotion();
+
   if (value === null) {
     return (
       <div className="flex items-center gap-3 py-2">
-        <span className="w-28 flex-shrink-0 text-[13px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+        <span className="w-28 flex-shrink-0 text-[13px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--ink-faint)' }}>
           {label}
         </span>
-        <span className="text-[12px] text-ink-faint italic font-mono">not enough data</span>
+        <span className="text-[12px] italic font-mono" style={{ color: 'var(--ink-faint)' }}>not enough data</span>
       </div>
     );
   }
 
   const color = barColor(value);
+  const clampedValue = Math.max(0, Math.min(100, value));
+  const scaleX = clampedValue / 100;
 
   return (
     <div className="py-2">
@@ -61,8 +75,8 @@ function BarRow({ label, value, inferred = false, index }: BarRowProps) {
             <span
               className="text-[10px] font-mono uppercase tracking-[0.06em] px-1.5 py-0.5 rounded-sm border"
               style={{
-                color: '#A6ADB6',
-                borderColor: 'rgba(20,22,26,0.10)',
+                color: 'var(--ink-faint)',
+                borderColor: 'var(--rule)',
                 backgroundColor: 'transparent',
               }}
             >
@@ -77,14 +91,30 @@ function BarRow({ label, value, inferred = false, index }: BarRowProps) {
           {Math.round(value)}
         </span>
       </div>
-      <div className="relative w-full h-[8px] rounded-sm overflow-hidden" style={{ backgroundColor: 'rgba(20,22,26,0.07)' }}>
+      <div
+        className="relative w-full h-[8px] rounded-sm overflow-hidden"
+        style={{ backgroundColor: 'var(--rule)' }}
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(value)}
+        aria-label={`${label} score`}
+      >
         <motion.div
-          className="absolute top-0 left-0 h-full rounded-sm"
-          initial={{ width: '0%' }}
-          whileInView={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+          className="absolute top-0 left-0 h-full w-full rounded-sm"
+          initial={prefersReducedMotion ? false : { scaleX: 0 }}
+          whileInView={prefersReducedMotion ? { scaleX } : { scaleX }}
           viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.06 * index }}
-          style={{ backgroundColor: color }}
+          transition={
+            prefersReducedMotion
+              ? { duration: 0 }
+              : { duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.06 * index }
+          }
+          style={{
+            backgroundColor: color,
+            transformOrigin: 'left',
+            scaleX: prefersReducedMotion ? scaleX : undefined,
+          }}
         />
       </div>
     </div>

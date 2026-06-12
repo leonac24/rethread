@@ -1,5 +1,3 @@
-'use client';
-
 type GradeBadgeProps = {
   grade: string;
   score?: number;
@@ -9,16 +7,36 @@ type GradeBadgeProps = {
 function gradeColor(grade: string): { bg: string; border: string; text: string } {
   switch (grade) {
     case 'A':
-      return { bg: '#5E8B6C18', border: '#5E8B6C', text: '#5E8B6C' };
+      return {
+        bg: 'color-mix(in srgb, var(--success) 9%, transparent)',
+        border: 'var(--success)',
+        text: 'var(--success)',
+      };
     case 'B':
-      return { bg: '#6FA8CE18', border: '#6FA8CE', text: '#2E5F83' };
+      return {
+        bg: 'color-mix(in srgb, var(--accent-500) 9%, transparent)',
+        border: 'var(--accent-500)',
+        text: 'var(--accent-700)',
+      };
     case 'C':
-      return { bg: '#C8A24A18', border: '#C8A24A', text: '#C8A24A' };
+      return {
+        bg: 'color-mix(in srgb, var(--warning) 9%, transparent)',
+        border: 'var(--warning)',
+        text: 'var(--warning)',
+      };
     case 'D':
-      return { bg: '#B07D2E18', border: '#B07D2E', text: '#B07D2E' };
+      return {
+        bg: 'color-mix(in srgb, color-mix(in srgb, var(--warning) 60%, var(--danger) 40%) 9%, transparent)',
+        border: 'color-mix(in srgb, var(--warning) 60%, var(--danger) 40%)',
+        text: 'color-mix(in srgb, var(--warning) 60%, var(--danger) 40%)',
+      };
     case 'F':
     default:
-      return { bg: '#B23A2B18', border: '#B23A2B', text: '#B23A2B' };
+      return {
+        bg: 'color-mix(in srgb, var(--danger) 9%, transparent)',
+        border: 'var(--danger)',
+        text: 'var(--danger)',
+      };
   }
 }
 

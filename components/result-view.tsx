@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   PieChart,
   Pie,
@@ -141,6 +141,7 @@ const SAVED_ACTION_META: Record<OutcomeAction, { label: string; color: string; s
 export function ResultView({ id, readOnly = false }: ResultViewProps) {
   const { firebaseUser, loading: authLoading } = useAuth();
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const [data, setData] = useState<{
     text: string;
     result: ScanResult;
@@ -294,7 +295,7 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
           <>
             {/* ── Grade Hero ───────────────────────────────────────── */}
             {data.result.garment_score && (() => {
-              const gs = data.result.garment_score!;
+              const gs = data.result.garment_score;
               const category = data.result.garment.category;
               const label = category ?? 'garment';
               const verdict =
@@ -306,10 +307,10 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
 
               return (
                 <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  whileInView={{ opacity: 1, y: 0 }}
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
+                  whileInView={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.25 }}
-                  transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                  transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
                 >
                   <Card>
                     <SectionLabel>Rethread Grade</SectionLabel>
