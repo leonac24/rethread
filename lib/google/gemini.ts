@@ -657,6 +657,8 @@ export async function ingestGarment(
   labelBuffers: Buffer[],
   garmentPhoto: Buffer | null,
 ): Promise<IngestResult> {
+  if (labelBuffers.length === 0 && garmentPhoto === null) throw new Error('ingestGarment requires at least one image.');
+
   const apiKey = getApiKey();
 
   const imageParts = [
@@ -714,6 +716,7 @@ export async function ingestGarment(
   try {
     return await attempt();
   } catch (err) {
+    if (err instanceof HttpError) throw err;
     log.warn('Gemini ingest parse/validation failed, retrying once', {
       stage: 'ingest',
       err: err instanceof Error ? err.message : String(err),

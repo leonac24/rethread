@@ -19,6 +19,21 @@ const valid = {
 };
 
 describe('ingestGarment', () => {
+  test('throws immediately when no images are provided', async () => {
+    globalThis.fetch = (() => { throw new Error('should not fetch'); }) as unknown as typeof fetch;
+    await expect(ingestGarment([], null)).rejects.toThrow('requires at least one image');
+  });
+
+  test('does not double-retry on HTTP 400 client error', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response('bad request', { status: 400 });
+    }) as typeof fetch;
+    await expect(ingestGarment([Buffer.from('x')], null)).rejects.toThrow();
+    expect(calls).toBe(1);
+  });
+
   test('parses schema-enforced response', async () => {
     globalThis.fetch = (async () => geminiReply(valid)) as typeof fetch;
     const g = await ingestGarment([Buffer.from('fake')], null);
