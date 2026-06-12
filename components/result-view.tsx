@@ -727,7 +727,7 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                             {route.verified && (
                               <span
                                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold flex-shrink-0"
-                                style={{ backgroundColor: '#E8F0E6', color: '#5E8B6C' }}
+                                style={{ backgroundColor: 'color-mix(in srgb, var(--success) 12%, transparent)', color: 'var(--success)' }}
                               >
                                 rethread verified ✓
                               </span>
