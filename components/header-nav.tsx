@@ -30,10 +30,13 @@ export function HeaderNav() {
     );
   }
 
+  // Retailers land on their partner dashboard instead of the closet profile.
+  const homeHref = user.role === 'retailer' ? '/retailer' : '/profile';
+
   return (
     <div className="mr-5 flex items-center gap-3">
-      {/* Avatar → profile */}
-      <a href="/profile" className="flex items-center gap-2 group">
+      {/* Avatar → profile (or partner dashboard) */}
+      <a href={homeHref} className="flex items-center gap-2 group">
         {user.photoURL ? (
           <Image
             src={user.photoURL}
