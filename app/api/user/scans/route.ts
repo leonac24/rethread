@@ -27,6 +27,7 @@ export async function GET(request: Request) {
         listingId?: string;
         listingStatus?: string;
         listingOfferCount?: number;
+        resaleEvaluatedAt?: FirebaseFirestore.Timestamp;
       };
       return {
         scanId: data.scanId,
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
         listingId: data.listingId ?? null,
         listingStatus: data.listingStatus ?? null,
         listingOfferCount: data.listingOfferCount ?? 0,
+        resaleEvaluatedAt: data.resaleEvaluatedAt?.toMillis() ?? null,
       };
     });
 

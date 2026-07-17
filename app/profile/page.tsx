@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { LoadingScreen } from '@/components/loading-screen';
 import type { OutcomeAction, ScanResult } from '@/types/garment';
+import type { ResaleEstimate } from '@/types/marketplace';
 
 type SavedScan = {
   scanId: string;
@@ -16,6 +17,12 @@ type SavedScan = {
   imageUrls?: string[];
   listingStatus?: string | null;
   listingOfferCount?: number;
+  resaleEvaluatedAt?: number | null;
+};
+
+type SellPin = {
+  resale: ResaleEstimate | null;
+  evaluated: boolean;
 };
 
 type ClosetTile = {
@@ -26,6 +33,7 @@ type ClosetTile = {
   date: string;
   imageUrls: string[];
   saleTag: { label: string; color: string } | null;
+  sellPin: SellPin | null;
 };
 
 // Small pill on the tile when the item is in the marketplace.
@@ -76,6 +84,97 @@ function ActionBadge({ action }: { action: OutcomeAction }) {
   );
 }
 
+// Pushpin-tacked "Sell It" tag on the tile corner. Clicking it runs the
+// image-based appraisal; the green payout range then replaces the button and
+// links into the closet sell flow.
+function SellPinTag({ scanId, pin }: { scanId: string; pin: SellPin }) {
+  const { firebaseUser } = useAuth();
+  const [state, setState] = useState<'idle' | 'busy' | 'done'>(pin.evaluated && pin.resale ? 'done' : 'idle');
+  const [resale, setResale] = useState<ResaleEstimate | null>(pin.resale);
+  const router = useRouter();
+
+  async function handleEvaluate(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (state === 'busy') return;
+    if (!firebaseUser) return;
+    setState('busy');
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/user/scans/${scanId}/evaluate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = (await res.json().catch(() => ({}))) as { resale?: ResaleEstimate | null };
+      if (res.ok && body.resale) {
+        setResale(body.resale);
+        setState('done');
+        return;
+      }
+      // Fall back to the scan-time estimate; failing that, open the sell flow.
+      if (pin.resale) {
+        setResale(pin.resale);
+        setState('done');
+      } else {
+        router.push(`/closet/${scanId}`);
+      }
+    } catch {
+      setState('idle');
+    }
+  }
+
+  const pinhead = (
+    <span
+      aria-hidden
+      className="absolute -top-[7px] left-1/2 -translate-x-1/2 w-[13px] h-[13px] rounded-full"
+      style={{
+        background: 'radial-gradient(circle at 32% 30%, #8FBA9C 0%, #5E8B6C 45%, #35543F 100%)',
+        boxShadow: '0 2px 3px rgba(0,0,0,0.35), inset 0 -1px 2px rgba(0,0,0,0.25)',
+      }}
+    />
+  );
+
+  const tagClass =
+    'relative block rounded-md px-2.5 pb-1 pt-[7px] text-[11px] font-bold text-white leading-none whitespace-nowrap';
+  const tagStyle: React.CSSProperties = {
+    backgroundColor: '#5E8B6C',
+    boxShadow: '0 4px 8px rgba(20,22,26,0.3)',
+  };
+
+  return (
+    <div className="absolute -bottom-2 -right-1.5 z-20" style={{ transform: 'rotate(7deg)' }}>
+      {state === 'done' && resale ? (
+        <span
+          className={`${tagClass} cursor-pointer transition-transform hover:scale-105`}
+          style={tagStyle}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            router.push(`/closet/${scanId}`);
+          }}
+          role="link"
+          aria-label={`Estimated payout $${resale.low_usd} to $${resale.high_usd} — open sell flow`}
+        >
+          {pinhead}
+          ${resale.low_usd}–${resale.high_usd}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={handleEvaluate}
+          disabled={state === 'busy'}
+          aria-label="Evaluate resale payout"
+          className={`${tagClass} cursor-pointer transition-transform hover:scale-105 disabled:cursor-default`}
+          style={tagStyle}
+        >
+          {pinhead}
+          {state === 'busy' ? 'Appraising…' : 'Sell It'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ClosetItem({
   id,
   label,
@@ -84,6 +183,7 @@ function ClosetItem({
   date,
   imageUrls,
   saleTag,
+  sellPin,
   onRequestDelete,
 }: ClosetTile & { onRequestDelete: () => void }) {
   const imgSrc = imageUrls[0] ?? '/images/garment.webp';
@@ -98,40 +198,43 @@ function ClosetItem({
         className="w-[135px] h-auto object-contain relative z-10 mb-[-27px]"
       />
 
-      {/* garment card */}
-      <div
-        className="relative w-full rounded-xl overflow-hidden bg-surface border border-rule"
-        style={{ paddingTop: '110%' }}
-      >
-        <div className="absolute inset-0 flex items-center justify-center p-4">
-          <Image
-            src={imgSrc}
-            alt={label}
-            width={200}
-            height={200}
-            className="w-full h-full object-contain"
-          />
-        </div>
-        {saleTag && (
-          <span
-            className="absolute top-1.5 left-1.5 z-20 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-            style={{ backgroundColor: saleTag.color }}
-          >
-            {saleTag.label}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onRequestDelete();
-          }}
-          aria-label={`Remove ${label} from closet`}
-          className="absolute top-1.5 right-1.5 z-20 w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-[16px] leading-none text-ink-muted hover:text-danger cursor-pointer transition-colors"
+      {/* garment card — outer wrapper stays unclipped so the sell pin can overhang */}
+      <div className="relative w-full">
+        <div
+          className="relative w-full rounded-xl overflow-hidden bg-surface border border-rule"
+          style={{ paddingTop: '110%' }}
         >
-          ×
-        </button>
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <Image
+              src={imgSrc}
+              alt={label}
+              width={200}
+              height={200}
+              className="w-full h-full object-contain"
+            />
+          </div>
+          {saleTag && (
+            <span
+              className="absolute top-1.5 left-1.5 z-20 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+              style={{ backgroundColor: saleTag.color }}
+            >
+              {saleTag.label}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRequestDelete();
+            }}
+            aria-label={`Remove ${label} from closet`}
+            className="absolute top-1.5 right-1.5 z-20 w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-[16px] leading-none text-ink-muted hover:text-danger cursor-pointer transition-colors"
+          >
+            ×
+          </button>
+        </div>
+        {sellPin && <SellPinTag scanId={id} pin={sellPin} />}
       </div>
 
       {/* metadata below */}
@@ -322,6 +425,15 @@ export default function ProfilePage() {
       month: 'short',
       day: 'numeric',
     });
+    // The pinned Sell It tag only appears for closet items that aren't in the
+    // marketplace yet (listed items already show their sale-status pill).
+    const sellPin: SellPin | null =
+      !scan.listingStatus || scan.listingStatus === 'cancelled'
+        ? scan.action !== 'throw_away'
+          ? { resale: scan.result.cost.resale ?? null, evaluated: !!scan.resaleEvaluatedAt }
+          : null
+        : null;
+
     return {
       id: scan.scanId,
       label,
@@ -330,6 +442,7 @@ export default function ProfilePage() {
       date,
       imageUrls: scan.imageUrls ?? [],
       saleTag: getSaleTag(scan.listingStatus, scan.listingOfferCount ?? 0),
+      sellPin,
     };
   });
 
