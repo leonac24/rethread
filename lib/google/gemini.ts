@@ -494,6 +494,144 @@ export async function parseLabelWithGemini(ocrText: string): Promise<LabelParseR
   };
 }
 
+export type ResaleEvaluation = {
+  brand: string | null;
+  category: string | null;
+  color: string | null;
+  condition: GarmentCondition | null;
+  resale: ResaleEstimate | null;
+};
+
+// Full image-based resale appraisal for the listing flow. Unlike the scan-time
+// estimate (text-only, OCR-derived), this sees the actual photos — so brand
+// labels, logos, and true condition inform the payout. A Miu Miu polo should
+// price like Miu Miu, not like an unknown-brand polo.
+export async function evaluateResaleFromImages(
+  images: Array<{ mimeType: string; data: string }>,
+  garment?: Garment | null,
+): Promise<ResaleEvaluation> {
+  const apiKey = getApiKey();
+
+  const knownContext = garment
+    ? JSON.stringify({
+        brand: sanitizeForPrompt(garment.brand),
+        category: sanitizeForPrompt(garment.category ?? undefined),
+        color: sanitizeForPrompt(garment.color),
+        condition: garment.condition ?? null,
+        fibers: garment.fibers.map((f) => ({
+          material: sanitizeForPrompt(f.material),
+          percentage: f.percentage,
+        })),
+      })
+    : 'none';
+
+  const prompt = [
+    'You are an expert secondhand-clothing appraiser for a resale marketplace.',
+    'Examine the attached photos of a garment (and its care/brand labels, if shown) and do a full appraisal.',
+    '',
+    '## IDENTIFY',
+    '- brand: read brand names from labels, tags, logos, or embroidery. Recognize designer and',
+    '  luxury houses (e.g. Miu Miu, Prada, Gucci, Ralph Lauren) as readily as mass-market brands.',
+    '  Return null only if no brand is visible or inferable.',
+    '- category: garment type (e.g. "polo", "jeans", "dress", "jacket").',
+    '- color: dominant color as a descriptive name.',
+    '- condition: visible wear — "poor" | "fair" | "good" | "excellent".',
+    '',
+    '## PRICE (resale payout, USD)',
+    'Estimate what a resale/consignment store would PAY THE OWNER for this garment:',
+    '- Mass-market and fast-fashion brands: stores pay roughly 20-30% of their resale price.',
+    '- Designer and luxury brands hold real value: consignment payouts run 30-40% of realistic',
+    '  secondhand resale value. Do NOT lowball a recognized designer item to thrift prices —',
+    '  a $300-retail luxury polo in good condition should not be valued at $1-2.',
+    '- Within the right bracket, stay conservative: round DOWN and prefer the low end when',
+    '  brand authenticity or condition is unclear from the photos.',
+    '- resale_low_usd / resale_high_usd: integers, low >= 1, keep the range tight (high <= 2x low).',
+    '- resale_factors: 2-4 short phrases a shopper would understand,',
+    '  e.g. "Miu Miu resells strongly", "light wear on collar", "polos are steady sellers".',
+    '',
+    'Set confidence: high (brand label clearly readable + condition visible), medium (partial), low (guessing).',
+    '',
+    '--- PREVIOUSLY SCANNED DATA (may be incomplete or wrong; trust the photos over it) ---',
+    knownContext,
+    '--- END SCANNED DATA ---',
+    '',
+    'Return only valid JSON matching the schema.',
+  ].join('\n');
+
+  const data = await withRetry(async () => {
+    const response = await fetch(GEMINI_ENDPOINT, {
+      method: 'POST',
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+      headers: geminiHeaders(apiKey),
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              ...images.map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.data } })),
+              { text: prompt },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            required: ['brand', 'category', 'color', 'condition', 'confidence', 'resale_low_usd', 'resale_high_usd', 'resale_factors'],
+            properties: {
+              brand: { type: 'STRING', nullable: true },
+              category: { type: 'STRING', nullable: true },
+              color: { type: 'STRING', nullable: true },
+              condition: { type: 'STRING', enum: ['poor', 'fair', 'good', 'excellent'], nullable: true },
+              confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+              resale_low_usd: { type: 'NUMBER' },
+              resale_high_usd: { type: 'NUMBER' },
+              resale_factors: { type: 'ARRAY', items: { type: 'STRING' } },
+            },
+          },
+        },
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      log.error('Gemini resale evaluation failed', undefined, { stage: 'evaluate', status: response.status });
+      throw new HttpError(response.status, `Gemini resale evaluation failed (${response.status}): ${text}`);
+    }
+    return response.json() as Promise<GeminiResponse>;
+  }, { retries: 2, label: 'Gemini-evaluate' });
+
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) throw new Error('Gemini returned no content for resale evaluation.');
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Gemini returned non-JSON for resale evaluation: ${rawText}`);
+  }
+
+  const r = parsed as Record<string, unknown>;
+  const VALID_CONDITIONS = new Set<string>(['poor', 'fair', 'good', 'excellent']);
+
+  const resale = normalizeResaleEstimate({
+    low_usd: r.resale_low_usd,
+    high_usd: r.resale_high_usd,
+    confidence: r.confidence,
+    factors: r.resale_factors,
+  });
+
+  return {
+    brand: typeof r.brand === 'string' && r.brand ? sanitizeResponseText(r.brand.trim(), 80) : null,
+    category: typeof r.category === 'string' && r.category ? sanitizeResponseText(r.category.trim(), 60) : null,
+    color: typeof r.color === 'string' && r.color ? sanitizeResponseText(r.color.trim(), 60) : null,
+    condition:
+      typeof r.condition === 'string' && VALID_CONDITIONS.has(r.condition)
+        ? (r.condition as GarmentCondition)
+        : null,
+    resale,
+  };
+}
+
 export async function analyzeGarmentImage(
   imageBuffer: Buffer,
   mimeType = 'image/jpeg',

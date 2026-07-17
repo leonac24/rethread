@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/firebase/auth-context';
 import type { ResaleEstimate, ListingStatus } from '@/types/marketplace';
 
 const EVAL_STEPS = [
+  'Reading brand labels from your photos…',
   'Assessing condition…',
   'Weighing brand demand…',
   'Comparing category resale strength…',
@@ -68,17 +69,43 @@ export function SellSection({ scanId, resale, listingId, listingStatus }: SellSe
   const [evalStep, setEvalStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [liveListingId, setLiveListingId] = useState<string | null>(listingId);
+  // undefined = appraisal in flight; null = failed (fall back to scan-time estimate)
+  const [freshResale, setFreshResale] = useState<ResaleEstimate | null | undefined>(undefined);
 
-  // Staged reveal — real factors follow; this shows the work, not a fake delay.
+  // The staged reveal covers a real Gemini appraisal of the stored photos —
+  // it shows genuine work, not a fake delay.
   useEffect(() => {
     if (phase !== 'evaluating') return;
     if (evalStep >= EVAL_STEPS.length) {
-      setPhase('reveal');
+      // Hold on the last step until the appraisal settles.
+      if (freshResale !== undefined) setPhase('reveal');
       return;
     }
     const t = setTimeout(() => setEvalStep((s) => s + 1), EVAL_STEP_MS);
     return () => clearTimeout(t);
-  }, [phase, evalStep]);
+  }, [phase, evalStep, freshResale]);
+
+  async function startEvaluation() {
+    setEvalStep(0);
+    setFreshResale(undefined);
+    setPhase('evaluating');
+    try {
+      if (!firebaseUser) throw new Error('Not signed in.');
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/user/scans/${scanId}/evaluate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = (await res.json().catch(() => ({}))) as { resale?: ResaleEstimate | null };
+      if (!res.ok) throw new Error('evaluation unavailable');
+      setFreshResale(body.resale ?? null);
+    } catch {
+      // Image appraisal is best-effort — the scan-time estimate still works.
+      setFreshResale(null);
+    }
+  }
+
+  const effectiveResale = freshResale ?? resale;
 
   async function handleList() {
     if (!firebaseUser) return;
@@ -138,10 +165,7 @@ export function SellSection({ scanId, resale, listingId, listingStatus }: SellSe
           </p>
           <button
             type="button"
-            onClick={() => {
-              setEvalStep(0);
-              setPhase('evaluating');
-            }}
+            onClick={() => void startEvaluation()}
             className="rounded-xl bg-ink text-bg px-6 py-3 text-[14px] font-semibold transition-opacity hover:opacity-85 cursor-pointer"
           >
             Sell to a local store
@@ -179,18 +203,18 @@ export function SellSection({ scanId, resale, listingId, listingStatus }: SellSe
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
           >
-            {resale ? (
+            {effectiveResale ? (
               <div className="rounded-xl bg-bg p-4 mb-4">
                 <p className="text-[11px] font-bold tracking-[0.12em] uppercase text-ink-muted">
                   Estimated payout
                 </p>
                 <p className="mt-1 leading-none">
-                  <span className="text-[34px] font-black text-ink">${resale.low_usd}</span>
-                  <span className="text-[20px] font-semibold text-ink-muted">–${resale.high_usd}</span>
+                  <span className="text-[34px] font-black" style={{ color: '#5E8B6C' }}>${effectiveResale.low_usd}</span>
+                  <span className="text-[20px] font-semibold" style={{ color: '#5E8B6C', opacity: 0.75 }}>–${effectiveResale.high_usd}</span>
                 </p>
-                {resale.factors.length > 0 && (
+                {effectiveResale.factors.length > 0 && (
                   <ul className="mt-3 space-y-1">
-                    {resale.factors.map((f) => (
+                    {effectiveResale.factors.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-[13px] text-ink-muted">
                         <span className="mt-[2px] inline-block w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#C9983E' }} />
                         {f}
