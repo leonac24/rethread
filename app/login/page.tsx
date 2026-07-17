@@ -91,12 +91,15 @@ export default function LoginPage() {
           : {}),
       });
 
+      const body = await res.json().catch(() => ({})) as { error?: string; role?: string };
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? 'Failed to set up your account.');
       }
 
-      router.push(mode === 'retailer' ? '/retailer' : '/profile');
+      // Retailers always land on their dashboard, regardless of which
+      // sign-in mode they used.
+      const isRetailerAccount = mode === 'retailer' || body.role === 'retailer';
+      router.push(isRetailerAccount ? '/retailer' : '/profile');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Sign-in failed.';
       // User closed the popup — don't show as an error

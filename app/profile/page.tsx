@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { LoadingScreen } from '@/components/loading-screen';
 import type { OutcomeAction, ScanResult } from '@/types/garment';
@@ -235,6 +236,7 @@ function RankBadge({
 
 export default function ProfilePage() {
   const { user, firebaseUser, loading } = useAuth();
+  const router = useRouter();
   const [scans, setScans] = useState<SavedScan[] | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -262,6 +264,13 @@ export default function ProfilePage() {
       setDeleting(false);
     }
   }
+
+  // Retailers belong on their partner dashboard, not the closet profile.
+  useEffect(() => {
+    if (!loading && user?.role === 'retailer') {
+      router.replace('/retailer');
+    }
+  }, [loading, user, router]);
 
   useEffect(() => {
     let cancelled = false;
