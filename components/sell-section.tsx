@@ -238,6 +238,10 @@ export function SellSection({ scanId, resale, listingId, listingStatus, evaluate
                 <p className="mt-3 text-[12px] text-ink-faint leading-relaxed">
                   Stores make their own offers — this is a floor, not a promise.
                 </p>
+                <p className="mt-1.5 text-[12px] text-ink-faint leading-relaxed">
+                  Listing adds this garment&apos;s photos, details, and approximate area to the
+                  marketplace, where approved resale partners near you can see it and make offers.
+                </p>
               </div>
             ) : (
               <p className="text-[14px] text-ink-muted mb-4">

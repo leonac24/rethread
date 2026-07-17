@@ -1,5 +1,6 @@
 import { verifyBearerToken } from '@/lib/firebase/verify-token';
 import { db, adminStorage, storageBucketName } from '@/lib/firebase/admin';
+import { repairLegacyImageUrls } from '@/lib/firebase/repair-image-urls';
 import { FieldValue } from 'firebase-admin/firestore';
 import type { OutcomeAction, ScanResult } from '@/types/garment';
 
@@ -45,13 +46,25 @@ export async function GET(
       resaleEvaluatedAt?: FirebaseFirestore.Timestamp;
     };
 
+    // Lazy one-time repair of legacy tokenized URLs (402 on Spark plan).
+    let imageUrls = data.imageUrls ?? [];
+    try {
+      const repaired = await repairLegacyImageUrls(imageUrls);
+      if (repaired) {
+        imageUrls = repaired;
+        await doc.ref.update({ imageUrls: repaired });
+      }
+    } catch {
+      // Repair is best-effort; the scan itself still renders.
+    }
+
     return Response.json({
       scanId: data.scanId,
       action: data.action,
       result: data.result,
       text: data.text,
       createdAt: data.createdAt?.toMillis() ?? 0,
-      imageUrls: data.imageUrls ?? [],
+      imageUrls,
       listingId: data.listingId ?? null,
       listingStatus: data.listingStatus ?? null,
       listingOfferCount: data.listingOfferCount ?? 0,
