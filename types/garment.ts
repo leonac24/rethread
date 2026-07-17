@@ -1,3 +1,7 @@
+import type { ResaleEstimate } from './marketplace';
+
+export type { ResaleEstimate } from './marketplace';
+
 export type Fiber = {
   material: string;
   percentage: number;
@@ -25,6 +29,7 @@ export type EnvironmentalCost = {
   disposal_co2_kg: number;
   disposal_landfill_years: number;
   disposal_note: string;
+  resale?: ResaleEstimate;
 };
 
 export type RouteKind = 'repair' | 'resale' | 'donation';

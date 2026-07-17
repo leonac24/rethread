@@ -1,4 +1,4 @@
-import type { EnvironmentalCost, Garment, GarmentCondition, LandfillImpact } from '@/types/garment';
+import type { EnvironmentalCost, Garment, GarmentCondition, LandfillImpact, ResaleEstimate } from '@/types/garment';
 import { log } from '@/lib/logger';
 import { GEMINI_TIMEOUT_MS } from '@/lib/config';
 import { withRetry, HttpError } from '@/lib/retry';
@@ -79,6 +79,14 @@ function buildPrompt(garment: Garment, brandContext?: string) {
     '- disposal_landfill_years: estimated years to decompose in landfill (integer)',
     '- disposal_note: one sentence summarising disposal impact, max 40 words',
     '',
+    'Also estimate the resale payout a thrift/consignment store would PAY THE OWNER for this garment, in USD:',
+    '- Thrift stores pay roughly 20-30% of what they can resell the item for.',
+    '- BE ULTRACONSERVATIVE: round DOWN, and when brand, condition, or category is uncertain, go lower.',
+    '- A disappointing-low estimate is fine; an optimistic-high estimate is a failure.',
+    '- resale_low_usd / resale_high_usd: integers, low >= 1. Keep the range tight (high <= 2x low).',
+    '- resale_factors: 2-4 short phrases (max 8 words each) a shopper would understand,',
+    '  e.g. "denim resells strongly", "fast-fashion brand limits payout", "good condition".',
+    '',
     'Set confidence based on how much information is available:',
     '- high: fiber blend + color + origin all known',
     '- medium: some fields missing',
@@ -129,6 +137,32 @@ function normalizeDyeAnalysis(value: unknown): DyeAnalysis {
   };
 }
 
+// Normalize the resale payout estimate from a Gemini response.
+// Returns null rather than throwing — resale is an optional enrichment,
+// never a reason to fail the whole cost computation.
+export function normalizeResaleEstimate(value: unknown): ResaleEstimate | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.low_usd !== 'number' || typeof candidate.high_usd !== 'number') return null;
+
+  const low = Math.max(1, Math.floor(candidate.low_usd));
+  const high = Math.max(low, Math.floor(candidate.high_usd));
+
+  const confidence =
+    typeof candidate.confidence === 'string' && ['high', 'medium', 'low'].includes(candidate.confidence)
+      ? (candidate.confidence as ResaleEstimate['confidence'])
+      : 'low';
+
+  const factors = (Array.isArray(candidate.factors) ? candidate.factors : [])
+    .filter((f): f is string => typeof f === 'string')
+    .map((f) => sanitizeResponseText(f, 80))
+    .filter((f) => f.length > 0)
+    .slice(0, 4);
+
+  return { low_usd: low, high_usd: high, confidence, factors };
+}
+
 const GEMINI_ENDPOINT =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -176,7 +210,7 @@ export async function computeCost(
           responseMimeType: 'application/json',
           responseSchema: {
             type: 'OBJECT',
-            required: ['dye_pollution_score', 'confidence', 'reasoning', 'disposal_co2_kg', 'disposal_landfill_years', 'disposal_note'],
+            required: ['dye_pollution_score', 'confidence', 'reasoning', 'disposal_co2_kg', 'disposal_landfill_years', 'disposal_note', 'resale_low_usd', 'resale_high_usd', 'resale_factors'],
             properties: {
               dye_pollution_score: { type: 'NUMBER' },
               confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
@@ -184,6 +218,9 @@ export async function computeCost(
               disposal_co2_kg: { type: 'NUMBER' },
               disposal_landfill_years: { type: 'NUMBER' },
               disposal_note: { type: 'STRING' },
+              resale_low_usd: { type: 'NUMBER' },
+              resale_high_usd: { type: 'NUMBER' },
+              resale_factors: { type: 'ARRAY', items: { type: 'STRING' } },
               ...(hasDyeFields
                 ? {
                     dye_type: { type: 'STRING' },
@@ -215,10 +252,21 @@ export async function computeCost(
 
   const dye = normalizeDyeAnalysis(parsed);
 
+  // Resale estimate is schema-required, but normalize defensively — a bad
+  // resale block should never sink the rest of the cost result.
+  const raw = parsed as Record<string, unknown>;
+  const resale = normalizeResaleEstimate({
+    low_usd: raw.resale_low_usd,
+    high_usd: raw.resale_high_usd,
+    confidence: dye.confidence,
+    factors: raw.resale_factors,
+  });
+
   return {
     water_liters,
     co2_kg,
     ...dye,
+    ...(resale ? { resale } : {}),
   };
 }
 
