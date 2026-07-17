@@ -23,6 +23,9 @@ type SellSectionProps = {
   resale: ResaleEstimate | null;
   listingId: string | null;
   listingStatus: ListingStatus | null;
+  // True when an image-based appraisal is already stored on the scan —
+  // the price shows immediately instead of re-running the evaluation.
+  evaluated?: boolean;
 };
 
 type Phase = 'idle' | 'evaluating' | 'reveal' | 'listing' | 'listed';
@@ -62,15 +65,19 @@ function getPosition(lat: number | null, lng: number | null): Promise<{ lat?: nu
   });
 }
 
-export function SellSection({ scanId, resale, listingId, listingStatus }: SellSectionProps) {
+export function SellSection({ scanId, resale, listingId, listingStatus, evaluated = false }: SellSectionProps) {
   const { firebaseUser } = useAuth();
   const alreadyLive = listingStatus === 'active' || listingStatus === 'accepted';
-  const [phase, setPhase] = useState<Phase>(alreadyLive ? 'listed' : 'idle');
+  // Already-appraised items open straight on their stored price.
+  const [phase, setPhase] = useState<Phase>(alreadyLive ? 'listed' : evaluated ? 'reveal' : 'idle');
   const [evalStep, setEvalStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [liveListingId, setLiveListingId] = useState<string | null>(listingId);
+  const [hasEvaluated, setHasEvaluated] = useState(evaluated);
   // undefined = appraisal in flight; null = failed (fall back to scan-time estimate)
-  const [freshResale, setFreshResale] = useState<ResaleEstimate | null | undefined>(undefined);
+  const [freshResale, setFreshResale] = useState<ResaleEstimate | null | undefined>(
+    evaluated ? null : undefined,
+  );
 
   // The staged reveal covers a real Gemini appraisal of the stored photos —
   // it shows genuine work, not a fake delay.
@@ -86,6 +93,11 @@ export function SellSection({ scanId, resale, listingId, listingStatus }: SellSe
   }, [phase, evalStep, freshResale]);
 
   async function startEvaluation() {
+    // The appraisal is persisted server-side — never re-pay for it.
+    if (hasEvaluated) {
+      setPhase('reveal');
+      return;
+    }
     setEvalStep(0);
     setFreshResale(undefined);
     setPhase('evaluating');
@@ -99,6 +111,7 @@ export function SellSection({ scanId, resale, listingId, listingStatus }: SellSe
       const body = (await res.json().catch(() => ({}))) as { resale?: ResaleEstimate | null };
       if (!res.ok) throw new Error('evaluation unavailable');
       setFreshResale(body.resale ?? null);
+      setHasEvaluated(true);
     } catch {
       // Image appraisal is best-effort — the scan-time estimate still works.
       setFreshResale(null);

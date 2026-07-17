@@ -42,6 +42,7 @@ export async function GET(
       listingId?: string;
       listingStatus?: string;
       listingOfferCount?: number;
+      resaleEvaluatedAt?: FirebaseFirestore.Timestamp;
     };
 
     return Response.json({
@@ -54,6 +55,7 @@ export async function GET(
       listingId: data.listingId ?? null,
       listingStatus: data.listingStatus ?? null,
       listingOfferCount: data.listingOfferCount ?? 0,
+      resaleEvaluatedAt: data.resaleEvaluatedAt?.toMillis() ?? null,
     });
   } catch (err) {
     console.error('[user/scans/:scanId] Firestore error', {

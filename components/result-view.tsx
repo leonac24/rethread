@@ -147,6 +147,7 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
     previews?: string[];
     listingId?: string | null;
     listingStatus?: ListingStatus | null;
+    resaleEvaluatedAt?: number | null;
   } | null>(null);
   const [savedAction, setSavedAction] = useState<OutcomeAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -210,6 +211,7 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
           imageUrls?: string[];
           listingId?: string | null;
           listingStatus?: ListingStatus | null;
+          resaleEvaluatedAt?: number | null;
         };
         if (!response.ok || !payload.result || typeof payload.text !== 'string') {
           throw new Error(payload.error ?? 'Result not found.');
@@ -221,6 +223,7 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
             previews: payload.imageUrls?.length ? payload.imageUrls : undefined,
             listingId: payload.listingId ?? null,
             listingStatus: payload.listingStatus ?? null,
+            resaleEvaluatedAt: payload.resaleEvaluatedAt ?? null,
           });
           if (payload.action) setSavedAction(payload.action);
         }
@@ -739,6 +742,7 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                 resale={data.result.cost.resale ?? null}
                 listingId={data.listingId ?? null}
                 listingStatus={data.listingStatus ?? null}
+                evaluated={!!data.resaleEvaluatedAt}
               />
             )}
 
