@@ -8,7 +8,7 @@ const mockOrderBy = mock(() => ({ limit: mockLimit }));
 const mockCollection = mock(() => ({ orderBy: mockOrderBy }));
 const mockDb = mock(() => ({ collection: mockCollection }));
 
-mock.module('../../lib/firebase/admin', () => ({ db: mockDb }));
+mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }), storageBucketName: () => 'test-bucket' }));
 
 const { GET } = await import('../../app/api/leaderboard/route');
 

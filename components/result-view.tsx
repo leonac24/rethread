@@ -13,7 +13,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { OutcomeAction, RouteOption, ScanResult } from '@/types/garment';
+import type { ListingStatus } from '@/types/marketplace';
 import { OutcomeSection } from '@/components/outcome-section';
+import { SellSection } from '@/components/sell-section';
 import { LoadingScreen } from '@/components/loading-screen';
 import { useAuth } from '@/lib/firebase/auth-context';
 
@@ -143,6 +145,9 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
     text: string;
     result: ScanResult;
     previews?: string[];
+    listingId?: string | null;
+    listingStatus?: ListingStatus | null;
+    resaleEvaluatedAt?: number | null;
   } | null>(null);
   const [savedAction, setSavedAction] = useState<OutcomeAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +209,9 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
           result?: ScanResult;
           text?: string;
           imageUrls?: string[];
+          listingId?: string | null;
+          listingStatus?: ListingStatus | null;
+          resaleEvaluatedAt?: number | null;
         };
         if (!response.ok || !payload.result || typeof payload.text !== 'string') {
           throw new Error(payload.error ?? 'Result not found.');
@@ -213,6 +221,9 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
             text: payload.text,
             result: payload.result,
             previews: payload.imageUrls?.length ? payload.imageUrls : undefined,
+            listingId: payload.listingId ?? null,
+            listingStatus: payload.listingStatus ?? null,
+            resaleEvaluatedAt: payload.resaleEvaluatedAt ?? null,
           });
           if (payload.action) setSavedAction(payload.action);
         }
@@ -266,6 +277,7 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
   const dyeScore = data?.result.cost.dye_pollution_score ?? 0;
   const dyeColor = dyeScore <= 3 ? '#5E8B6C' : dyeScore <= 6 ? '#C8A24A' : '#B23A2B';
   const fiberData = data?.result.garment.fibers.map((f) => ({ name: f.material, value: f.percentage })) ?? [];
+  const fibersEstimated = data?.result.garment.fibers_estimated === true;
 
   if (!data && !error) {
     return <LoadingScreen blurbs={['Retrieving garment details', 'Loading your scan']} />;
@@ -433,7 +445,17 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                 transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
               >
               <Card style={{ backgroundImage: 'url(/images/burlap.webp)', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: 'none', backgroundColor: 'transparent' }}>
-                <SectionLabel><span className="text-ink bg-white px-1">Fiber Composition</span></SectionLabel>
+                <SectionLabel>
+                  <span className="text-ink bg-white px-1">Fiber Composition</span>
+                  {fibersEstimated && (
+                    <span
+                      className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white align-middle"
+                      style={{ backgroundColor: '#C9983E' }}
+                    >
+                      AI estimate
+                    </span>
+                  )}
+                </SectionLabel>
 
                 {/* SVG defs — crumpled-paper pattern tinted per fiber color */}
                 <svg width="0" height="0" aria-hidden className="absolute">
@@ -508,10 +530,17 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                         className="inline-block w-2 h-2 rounded-full flex-shrink-0"
                         style={{ backgroundColor: FIBER_COLORS[i % FIBER_COLORS.length] }}
                       />
-                      {d.name} · {d.value}%
+                      {d.name} · {d.value}%{fibersEstimated ? ' (est.)' : ''}
                     </span>
                   ))}
                 </div>
+                {fibersEstimated && (
+                  <p className="mt-3 text-[12px] leading-snug text-ink bg-white/85 rounded-lg px-3 py-2">
+                    No readable fiber label was found, so this breakdown is our AI&apos;s best guess
+                    from the photos — not a certainty. Complex items like shoes are estimated
+                    component by component (mesh, rubber, foam, …).
+                  </p>
+                )}
               </Card>
               </motion.div>
             )}
@@ -721,6 +750,17 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                 cost={data.result.cost}
                 condition={data.result.garment.condition}
                 onOutcomeRecorded={setSavedAction}
+              />
+            )}
+
+            {/* ── Sell It (closet items only) ──────────────────────── */}
+            {readOnly && savedAction !== 'throw_away' && (
+              <SellSection
+                scanId={id}
+                resale={data.result.cost.resale ?? null}
+                listingId={data.listingId ?? null}
+                listingStatus={data.listingStatus ?? null}
+                evaluated={!!data.resaleEvaluatedAt}
               />
             )}
 

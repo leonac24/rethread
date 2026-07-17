@@ -22,7 +22,10 @@ const mockVerifyBearerToken = mock(async (_req: Request) => null);
 const mockBatchCommit = mock(async () => {});
 const mockBatchSet = mock(() => {});
 const mockBatch = mock(() => ({ set: mockBatchSet, commit: mockBatchCommit }));
-const mockDoc = mock(() => ({ id: 'new-doc-id' }));
+const mockDoc = mock(() => ({
+  id: 'new-doc-id',
+  collection: () => ({ doc: mockDoc }),
+}));
 const mockCollection = mock(() => ({ doc: mockDoc }));
 const mockDb = mock(() => ({ collection: mockCollection, batch: mockBatch }));
 
@@ -34,7 +37,7 @@ mock.module('../../lib/rate-limit', () => ({
 mock.module('../../lib/firebase/verify-token', () => ({
   verifyBearerToken: mockVerifyBearerToken,
 }));
-mock.module('../../lib/firebase/admin', () => ({ db: mockDb }));
+mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }), storageBucketName: () => 'test-bucket' }));
 mock.module('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'SERVER_TS', increment: (n: number) => ({ _increment: n }) },
 }));

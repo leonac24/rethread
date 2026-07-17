@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { LoadingScreen } from '@/components/loading-screen';
 import type { OutcomeAction, ScanResult } from '@/types/garment';
+import type { ResaleEstimate } from '@/types/marketplace';
 
 type SavedScan = {
   scanId: string;
@@ -13,6 +15,17 @@ type SavedScan = {
   result: ScanResult;
   createdAt: number;
   imageUrls?: string[];
+  listingId?: string | null;
+  listingStatus?: string | null;
+  listingOfferCount?: number;
+  resaleEvaluatedAt?: number | null;
+};
+
+type SellPin = {
+  resale: ResaleEstimate | null;
+  evaluated: boolean;
+  listingId: string | null;
+  listingStatus: string | null;
 };
 
 type ClosetTile = {
@@ -22,7 +35,21 @@ type ClosetTile = {
   action: OutcomeAction;
   date: string;
   imageUrls: string[];
+  saleTag: { label: string; color: string } | null;
+  sellPin: SellPin | null;
 };
+
+// Small pill on the tile when the item is in the marketplace.
+function getSaleTag(status: string | null | undefined, offerCount: number): { label: string; color: string } | null {
+  if (status === 'active') {
+    return offerCount > 0
+      ? { label: 'Offer', color: '#5E8B6C' }
+      : { label: 'For Sale', color: '#C9983E' };
+  }
+  if (status === 'accepted') return { label: 'Sale Pending', color: '#B07D2E' };
+  if (status === 'completed') return { label: 'Sold', color: '#5E8B6C' };
+  return null;
+}
 
 const ACTION_BADGE: Record<OutcomeAction, { label: string; color: string }> = {
   donate: { label: 'Donated', color: '#5E8B6C' },      // green — best
@@ -60,6 +87,206 @@ function ActionBadge({ action }: { action: OutcomeAction }) {
   );
 }
 
+// Best-effort browser location for the listing's approximate area.
+function getPosition(): Promise<{ lat?: number; lng?: number }> {
+  return new Promise((resolve) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return resolve({});
+    const timer = setTimeout(() => resolve({}), 3000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timer);
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        clearTimeout(timer);
+        resolve({});
+      },
+      { timeout: 3000 },
+    );
+  });
+}
+
+const LISTING_DISCLOSURE =
+  "Listing shares this garment's photos, details, and approximate area with approved resale partners near you.";
+
+// Pushpin-tacked "Sell It" tag on the tile corner. The full sell loop lives
+// here: Sell It → appraise → "$lo–$hi · List It" → listed (with a small ✕ to
+// unlist). Listing state is lifted to the page so the For Sale pill stays in
+// sync without a refetch.
+function SellPinTag({
+  scanId,
+  pin,
+  onListingChange,
+}: {
+  scanId: string;
+  pin: SellPin;
+  onListingChange: (listingId: string | null, status: 'active' | 'cancelled') => void;
+}) {
+  const { firebaseUser } = useAuth();
+  const [busy, setBusy] = useState<null | 'appraising' | 'listing' | 'unlisting'>(null);
+  const [freshResale, setFreshResale] = useState<ResaleEstimate | null>(null);
+  const [failed, setFailed] = useState(false);
+  const router = useRouter();
+
+  const resale = freshResale ?? pin.resale;
+  const listed = pin.listingStatus === 'active';
+  const priced = !listed && !!resale && (pin.evaluated || freshResale !== null);
+
+  async function handleAppraise(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (busy || !firebaseUser) return;
+    setBusy('appraising');
+    setFailed(false);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/user/scans/${scanId}/evaluate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = (await res.json().catch(() => ({}))) as { resale?: ResaleEstimate | null };
+      if (res.ok && body.resale) {
+        setFreshResale(body.resale);
+      } else if (pin.resale) {
+        // Fall back to the scan-time estimate; failing that, open the sell flow.
+        setFreshResale(pin.resale);
+      } else {
+        router.push(`/closet/${scanId}`);
+      }
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleList(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (busy || !firebaseUser) return;
+    setBusy('listing');
+    setFailed(false);
+    try {
+      const [{ lat, lng }, token] = await Promise.all([getPosition(), firebaseUser.getIdToken()]);
+      const res = await fetch('/api/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ scanId, ...(lat != null && lng != null ? { lat, lng } : {}) }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { listing?: { id: string } };
+      if (!res.ok || !body.listing?.id) throw new Error('Failed to list.');
+      onListingChange(body.listing.id, 'active');
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleUnlist(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (busy || !firebaseUser || !pin.listingId) return;
+    setBusy('unlisting');
+    setFailed(false);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/listings/${pin.listingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: 'cancelled' }),
+      });
+      if (!res.ok) throw new Error('Failed to unlist.');
+      onListingChange(pin.listingId, 'cancelled');
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const pinhead = (
+    <span
+      aria-hidden
+      className="absolute -top-[7px] left-1/2 -translate-x-1/2 w-[13px] h-[13px] rounded-full"
+      style={{
+        background: 'radial-gradient(circle at 32% 30%, #8FBA9C 0%, #5E8B6C 45%, #35543F 100%)',
+        boxShadow: '0 2px 3px rgba(0,0,0,0.35), inset 0 -1px 2px rgba(0,0,0,0.25)',
+      }}
+    />
+  );
+
+  const tagClass =
+    'relative block rounded-md px-2.5 pb-1 pt-[7px] text-[11px] font-bold text-white leading-none whitespace-nowrap';
+  const tagStyle: React.CSSProperties = {
+    backgroundColor: '#5E8B6C',
+    boxShadow: '0 4px 8px rgba(20,22,26,0.3)',
+  };
+
+  const range = resale ? `$${resale.low_usd}–$${resale.high_usd}` : null;
+
+  return (
+    <div className="absolute -bottom-2 -right-1.5 z-20" style={{ transform: 'rotate(7deg)' }}>
+      {listed ? (
+        <span className="relative block">
+          <span
+            className={`${tagClass} cursor-pointer transition-transform hover:scale-105`}
+            style={tagStyle}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              router.push(`/closet/${scanId}`);
+            }}
+            role="link"
+            aria-label={`Listed${range ? ` at ${range}` : ''} — view offers`}
+          >
+            {pinhead}
+            {busy === 'unlisting' ? 'Unlisting…' : range ?? 'Listed'}
+          </span>
+          <button
+            type="button"
+            onClick={handleUnlist}
+            disabled={busy !== null}
+            aria-label="Unlist from marketplace"
+            title="Unlist from marketplace"
+            className="absolute -top-2.5 -right-2.5 z-30 w-[18px] h-[18px] rounded-full bg-white flex items-center justify-center text-[12px] leading-none font-bold text-ink-muted hover:text-white cursor-pointer disabled:cursor-default transition-colors"
+            style={{ boxShadow: '0 1px 4px rgba(20,22,26,0.3)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#B23A2B'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#ffffff'; }}
+          >
+            ×
+          </button>
+        </span>
+      ) : priced ? (
+        <button
+          type="button"
+          onClick={handleList}
+          disabled={busy !== null}
+          aria-label={`List on the marketplace — estimated payout ${range}`}
+          title={LISTING_DISCLOSURE}
+          className={`${tagClass} cursor-pointer transition-transform hover:scale-105 disabled:cursor-default`}
+          style={tagStyle}
+        >
+          {pinhead}
+          {busy === 'listing' ? 'Listing…' : failed ? 'Retry listing' : `${range} · List It`}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleAppraise}
+          disabled={busy !== null}
+          aria-label="Evaluate resale payout"
+          className={`${tagClass} cursor-pointer transition-transform hover:scale-105 disabled:cursor-default`}
+          style={tagStyle}
+        >
+          {pinhead}
+          {busy === 'appraising' ? 'Appraising…' : failed ? 'Retry' : 'Sell It'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ClosetItem({
   id,
   label,
@@ -67,8 +294,14 @@ function ClosetItem({
   action,
   date,
   imageUrls,
+  saleTag,
+  sellPin,
   onRequestDelete,
-}: ClosetTile & { onRequestDelete: () => void }) {
+  onListingChange,
+}: ClosetTile & {
+  onRequestDelete: () => void;
+  onListingChange: (listingId: string | null, status: 'active' | 'cancelled') => void;
+}) {
   const imgSrc = imageUrls[0] ?? '/images/garment.webp';
   return (
     <Link href={`/closet/${id}`} className="flex flex-col items-center w-full">
@@ -81,32 +314,43 @@ function ClosetItem({
         className="w-[135px] h-auto object-contain relative z-10 mb-[-27px]"
       />
 
-      {/* garment card */}
-      <div
-        className="relative w-full rounded-xl overflow-hidden bg-surface border border-rule"
-        style={{ paddingTop: '110%' }}
-      >
-        <div className="absolute inset-0 flex items-center justify-center p-4">
-          <Image
-            src={imgSrc}
-            alt={label}
-            width={200}
-            height={200}
-            className="w-full h-full object-contain"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onRequestDelete();
-          }}
-          aria-label={`Remove ${label} from closet`}
-          className="absolute top-1.5 right-1.5 z-20 w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-[16px] leading-none text-ink-muted hover:text-danger cursor-pointer transition-colors"
+      {/* garment card — outer wrapper stays unclipped so the sell pin can overhang */}
+      <div className="relative w-full">
+        <div
+          className="relative w-full rounded-xl overflow-hidden bg-surface border border-rule"
+          style={{ paddingTop: '110%' }}
         >
-          ×
-        </button>
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <Image
+              src={imgSrc}
+              alt={label}
+              width={200}
+              height={200}
+              className="w-full h-full object-contain"
+            />
+          </div>
+          {saleTag && (
+            <span
+              className="absolute top-1.5 left-1.5 z-20 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+              style={{ backgroundColor: saleTag.color }}
+            >
+              {saleTag.label}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRequestDelete();
+            }}
+            aria-label={`Remove ${label} from closet`}
+            className="absolute top-1.5 right-1.5 z-20 w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-[16px] leading-none text-ink-muted hover:text-danger cursor-pointer transition-colors"
+          >
+            ×
+          </button>
+        </div>
+        {sellPin && <SellPinTag scanId={id} pin={sellPin} onListingChange={onListingChange} />}
       </div>
 
       {/* metadata below */}
@@ -211,6 +455,7 @@ function RankBadge({
 
 export default function ProfilePage() {
   const { user, firebaseUser, loading } = useAuth();
+  const router = useRouter();
   const [scans, setScans] = useState<SavedScan[] | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -238,6 +483,13 @@ export default function ProfilePage() {
       setDeleting(false);
     }
   }
+
+  // Retailers belong on their partner dashboard, not the closet profile.
+  useEffect(() => {
+    if (!loading && user?.role === 'retailer') {
+      router.replace('/retailer');
+    }
+  }, [loading, user, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,7 +533,9 @@ export default function ProfilePage() {
     const fibers = scan.result.garment.fibers ?? [];
     const fiberStr =
       fibers.length > 0
-        ? fibers.map((f) => `${f.percentage}% ${f.material}`).join(' / ')
+        ? `${scan.result.garment.fibers_estimated ? 'Est. ' : ''}${fibers
+            .map((f) => `${f.percentage}% ${f.material}`)
+            .join(' / ')}`
         : 'Unknown fiber';
     const label =
       scan.result.garment.category ?? scan.result.garment.brand ?? 'Garment';
@@ -289,6 +543,22 @@ export default function ProfilePage() {
       month: 'short',
       day: 'numeric',
     });
+    // The pinned Sell It tag carries the full sell loop (appraise → list →
+    // unlist), so it stays visible while a listing is active. It only drops
+    // off once a sale is locked in (accepted/completed) or the item was
+    // trashed — those states are managed from the garment detail page.
+    const pinnable =
+      scan.action !== 'throw_away' &&
+      (!scan.listingStatus || scan.listingStatus === 'cancelled' || scan.listingStatus === 'active');
+    const sellPin: SellPin | null = pinnable
+      ? {
+          resale: scan.result.cost.resale ?? null,
+          evaluated: !!scan.resaleEvaluatedAt,
+          listingId: scan.listingId ?? null,
+          listingStatus: scan.listingStatus ?? null,
+        }
+      : null;
+
     return {
       id: scan.scanId,
       label,
@@ -296,6 +566,8 @@ export default function ProfilePage() {
       action: scan.action,
       date,
       imageUrls: scan.imageUrls ?? [],
+      saleTag: getSaleTag(scan.listingStatus, scan.listingOfferCount ?? 0),
+      sellPin,
     };
   });
 
@@ -404,6 +676,15 @@ export default function ProfilePage() {
                 onRequestDelete={() => {
                   setDeleteError(null);
                   setDeleteTarget({ id: tile.id, label: tile.label });
+                }}
+                onListingChange={(listingId, status) => {
+                  setScans((prev) =>
+                    prev?.map((s) =>
+                      s.scanId === tile.id
+                        ? { ...s, listingId, listingStatus: status, listingOfferCount: 0 }
+                        : s,
+                    ) ?? null,
+                  );
                 }}
               />
             ))}

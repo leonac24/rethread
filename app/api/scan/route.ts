@@ -1,8 +1,8 @@
-import { analyzeGarmentImage, computeCost, computeLandfillImpact, parseLabelWithGemini } from '@/lib/google/gemini';
-import { getBrandContext } from '@/lib/google/bigquery';
+import { analyzeGarment, type GarmentAnalysis } from '@/lib/google/gemini';
 import { getFashionTransparencyScore } from '@/lib/wikirate';
 import { findRoutes } from '@/lib/google/places';
 import { parseClothingLabelText, readClothingLabelText } from '@/lib/google/vision';
+import { computeFiberImpact } from '@/lib/fiber-impact';
 import { saveScanResult } from '@/lib/scan-store';
 import { createRequestLogger } from '@/lib/logger';
 import { MAX_UPLOAD_FILES, MAX_FILE_BYTES } from '@/lib/config';
@@ -26,6 +26,13 @@ function isImageMagicBytes(buf: Buffer): boolean {
     buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
   ) return true;
   return false;
+}
+
+function detectImageMime(buf: Buffer): string {
+  if (buf[0] === 0x89 && buf[1] === 0x50) return 'image/png';
+  if (buf[0] === 0x47 && buf[1] === 0x49) return 'image/gif';
+  if (buf[0] === 0x52 && buf[1] === 0x49) return 'image/webp';
+  return 'image/jpeg';
 }
 
 // ─── Coordinate validation ────────────────────────────────────────────────────
@@ -131,120 +138,123 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     garmentPhotoBuffer = buf;
   }
 
-  reqLog.info('Starting scan pipeline', { stage: 'ingest', labelCount: labelBuffers.length, hasGarmentPhoto: !!garmentPhotoBuffer });
-
-  // [INGEST] OCR all label photos + optionally analyze garment image — run in parallel
-  const [texts, imageAnalysis] = await Promise.all([
-    Promise.all(
-      labelBuffers.map((buf) =>
-        readClothingLabelText(buf).catch((err) => {
-          reqLog.error('Vision OCR failed for a label photo', err, { stage: 'ingest' });
-          return '';
-        }),
-      ),
-    ),
-    garmentPhotoBuffer
-      ? analyzeGarmentImage(garmentPhotoBuffer).catch((err) => {
-          reqLog.error('Garment image analysis failed', err, { stage: 'ingest' });
-          return null;
-        })
-      : Promise.resolve(null),
-  ]);
-
-  const text = texts.join('\n');
-
-  // Use Gemini to parse the label — handles OCR noise, multi-language text, and layout variations.
-  // Fall back to the regex parser if Gemini fails.
-  let parsed: Awaited<ReturnType<typeof parseLabelWithGemini>>;
-  try {
-    parsed = await parseLabelWithGemini(text);
-    reqLog.info('Label parsed via Gemini', { stage: 'ingest', brand: parsed.brand, fiberCount: parsed.fibers.length });
-  } catch (err) {
-    reqLog.warn('Gemini label parse failed — falling back to regex parser', { stage: 'ingest', err: String(err) });
-    const fallback = parseClothingLabelText(text);
-    parsed = {
-      brand:    fallback.brand ?? null,
-      fibers:   fallback.fibers ?? [],
-      origin:   fallback.origin ?? null,
-      category: fallback.category ?? null,
-    };
-  }
-
-  const garment: ScanResult['garment'] = {
-    fibers: parsed.fibers,
-    origin: parsed.origin,
-    category: parsed.category ?? imageAnalysis?.category ?? null,
-    ...(parsed.brand ? { brand: parsed.brand } : {}),
-    ...(imageAnalysis?.color ? { color: imageAnalysis.color } : {}),
-    ...(imageAnalysis?.condition ? { condition: imageAnalysis.condition } : {}),
-  };
-
-  reqLog.info('Ingest complete', { stage: 'ingest', brand: garment.brand ?? null, category: garment.category });
-
-  // [COST] Fetch brand context from BigQuery, then compute cost via Gemini — in parallel with routes
+  // Validate coords early — a bad request should never cost a Gemini call.
   const latRaw = formData.get('lat');
   const lngRaw = formData.get('lng');
-
-  let routesPromise: Promise<ScanResult['routes']> = Promise.resolve(fallbackRoutes());
+  let coords: { lat: number; lng: number } | null = null;
 
   if (typeof latRaw === 'string' && typeof lngRaw === 'string') {
     const lat = Number(latRaw);
     const lng = Number(lngRaw);
-
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       return Response.json({ error: 'lat and lng must be numeric values.' }, { status: 400, headers: { 'X-Trace-Id': traceId } });
-    } else if (!isValidCoords(lat, lng)) {
-      return Response.json({ error: 'lat/lng out of valid geographic range.' }, { status: 400, headers: { 'X-Trace-Id': traceId } });
-    } else {
-      reqLog.info('Using provided coords for route lookup', { stage: 'route', lat, lng });
-      routesPromise = findRoutes(lat, lng, garment.category).catch((err) => {
-        reqLog.error('findRoutes failed', err, { stage: 'route' });
-        return fallbackRoutes();
-      });
     }
-  } else {
-    reqLog.warn('No coords on request — using fallback routes', { stage: 'route' });
+    if (!isValidCoords(lat, lng)) {
+      return Response.json({ error: 'lat/lng out of valid geographic range.' }, { status: 400, headers: { 'X-Trace-Id': traceId } });
+    }
+    coords = { lat, lng };
   }
 
-  // Fire all external lookups in parallel — FTI and brand context don't gate each other
+  reqLog.info('Starting scan pipeline', { stage: 'ingest', labelCount: labelBuffers.length, hasGarmentPhoto: !!garmentPhotoBuffer });
+
+  // [INGEST] OCR all label photos — the raw text feeds the super call as an
+  // auxiliary signal (and the regex fallback if Gemini is unavailable).
+  const texts = await Promise.all(
+    labelBuffers.map((buf) =>
+      readClothingLabelText(buf).catch((err) => {
+        reqLog.error('Vision OCR failed for a label photo', err, { stage: 'ingest' });
+        return '';
+      }),
+    ),
+  );
+  const text = texts.join('\n');
+
+  // [ANALYZE] One multimodal Gemini call: identification, dye/disposal
+  // analysis, landfill impact, and resale appraisal — all from the photos.
+  const imageParts = [...labelBuffers, ...(garmentPhotoBuffer ? [garmentPhotoBuffer] : [])].map((buf) => ({
+    mimeType: detectImageMime(buf),
+    data: buf.toString('base64'),
+  }));
+
+  let analysis: GarmentAnalysis | null = null;
+  try {
+    analysis = await analyzeGarment(imageParts, { ocrText: text });
+    reqLog.info('Garment analysis complete', {
+      stage: 'analyze',
+      brand: analysis.garment.brand,
+      category: analysis.garment.category,
+      fiberCount: analysis.garment.fibers.length,
+    });
+  } catch (err) {
+    reqLog.error('Gemini garment analysis failed — falling back to regex label parse', err, { stage: 'analyze' });
+  }
+
+  let garment: ScanResult['garment'];
+  if (analysis) {
+    const g = analysis.garment;
+    garment = {
+      fibers: g.fibers,
+      ...(g.fibers_estimated ? { fibers_estimated: true } : {}),
+      origin: g.origin,
+      category: g.category,
+      ...(g.brand ? { brand: g.brand } : {}),
+      ...(g.color ? { color: g.color } : {}),
+      ...(g.condition ? { condition: g.condition } : {}),
+    };
+  } else {
+    const fallback = parseClothingLabelText(text);
+    garment = {
+      fibers: fallback.fibers ?? [],
+      origin: fallback.origin ?? null,
+      category: fallback.category ?? null,
+      ...(fallback.brand ? { brand: fallback.brand } : {}),
+    };
+  }
+
+  // [COST] Water and CO2 always come from the fiber lookup table — real LCA
+  // data (Textile Exchange / Water Footprint Network), not AI estimates.
+  const { water_liters, co2_kg } = computeFiberImpact(garment.fibers, garment.category);
+  const cost: ScanResult['cost'] = analysis
+    ? {
+        water_liters,
+        co2_kg,
+        ...analysis.cost,
+        ...(analysis.resale ? { resale: analysis.resale } : {}),
+      }
+    : {
+        water_liters,
+        co2_kg,
+        dye_pollution_score: 1,
+        confidence: 'low',
+        reasoning: 'Environmental analysis unavailable. Showing lookup-table footprint only.',
+        disposal_co2_kg: 0,
+        disposal_landfill_years: 0,
+        disposal_note: 'Disposal impact unavailable.',
+      };
+
+  // [ROUTE + FTI] Both depend on identification (category / brand), so they
+  // start after the super call and run in parallel with each other.
+  const routesPromise: Promise<ScanResult['routes']> = coords
+    ? findRoutes(coords.lat, coords.lng, garment.category).catch((err) => {
+        reqLog.error('findRoutes failed', err, { stage: 'route' });
+        return fallbackRoutes();
+      })
+    : Promise.resolve(fallbackRoutes());
+  if (!coords) reqLog.warn('No coords on request — using fallback routes', { stage: 'route' });
+
   const ftiPromise = getFashionTransparencyScore(garment.brand ?? '').catch((err) => {
     reqLog.warn('WikiRate FTI lookup failed', { stage: 'cost', err: String(err) });
     return null;
   });
 
-  const costPromise: Promise<ScanResult['cost']> = getBrandContext(garment.brand ?? '')
-    .catch((err) => {
-      reqLog.warn('BigQuery brand context failed, proceeding without it', { stage: 'cost', err: err instanceof Error ? err.message : String(err) });
-      return null;
-    })
-    .then((brandContext) => computeCost(garment, brandContext ?? undefined))
-    .catch((err) => {
-      reqLog.error('Gemini cost estimation failed, returning fallback', err, { stage: 'cost' });
-      return {
-        water_liters: 0,
-        co2_kg: 0,
-        dye_pollution_score: 1,
-        confidence: 'low' as const,
-        reasoning: 'Cost estimation unavailable. Showing fallback values.',
-        disposal_co2_kg: 0,
-        disposal_landfill_years: 0,
-        disposal_note: 'Disposal impact unavailable.',
-      };
-    });
-
-  const landfillPromise = computeLandfillImpact(garment).catch((err) => {
-    reqLog.warn('Landfill impact failed', { stage: 'cost', err: String(err) });
-    return undefined;
-  });
-
-  const [cost, routes, landfill_impact, fti] = await Promise.all([costPromise, routesPromise, landfillPromise, ftiPromise]);
+  const [routes, fti] = await Promise.all([routesPromise, ftiPromise]);
 
   const result: ScanResult = {
     id: crypto.randomUUID(),
     garment,
     cost,
     routes: prioritizeRoutesByCondition(routes, garment.condition),
-    ...(landfill_impact ? { landfill_impact } : {}),
+    ...(analysis ? { landfill_impact: analysis.landfill } : {}),
     ...(fti ? { fti } : {}),
   };
 

@@ -13,6 +13,10 @@ type AuthUser = {
   totalCO2SavedKg?: number;
   totalWaterSavedLiters?: number;
   actionCount?: number;
+  // Marketplace role (retailers see /retailer instead of /profile)
+  role?: 'user' | 'retailer';
+  retailerStatus?: 'pending' | 'approved' | null;
+  storeName?: string | null;
 };
 
 type AuthContextValue = {
@@ -51,6 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         totalCO2SavedKg: number;
         totalWaterSavedLiters: number;
         actionCount: number;
+        role?: 'user' | 'retailer';
+        retailerStatus?: 'pending' | 'approved' | null;
+        storeName?: string | null;
       };
       setUser({
         uid: fbUser.uid,
@@ -60,6 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         totalCO2SavedKg: profile.totalCO2SavedKg,
         totalWaterSavedLiters: profile.totalWaterSavedLiters,
         actionCount: profile.actionCount,
+        role: profile.role ?? 'user',
+        retailerStatus: profile.retailerStatus ?? null,
+        storeName: profile.storeName ?? null,
       });
     } catch {
       // Network failure — still set user from Firebase data

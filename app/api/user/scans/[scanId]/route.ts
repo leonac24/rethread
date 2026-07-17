@@ -1,5 +1,6 @@
 import { verifyBearerToken } from '@/lib/firebase/verify-token';
-import { db, adminStorage } from '@/lib/firebase/admin';
+import { db, adminStorage, storageBucketName } from '@/lib/firebase/admin';
+import { repairLegacyImageUrls } from '@/lib/firebase/repair-image-urls';
 import { FieldValue } from 'firebase-admin/firestore';
 import type { OutcomeAction, ScanResult } from '@/types/garment';
 
@@ -39,7 +40,23 @@ export async function GET(
       text: string;
       createdAt?: FirebaseFirestore.Timestamp;
       imageUrls?: string[];
+      listingId?: string;
+      listingStatus?: string;
+      listingOfferCount?: number;
+      resaleEvaluatedAt?: FirebaseFirestore.Timestamp;
     };
+
+    // Lazy one-time repair of legacy tokenized URLs (402 on Spark plan).
+    let imageUrls = data.imageUrls ?? [];
+    try {
+      const repaired = await repairLegacyImageUrls(imageUrls);
+      if (repaired) {
+        imageUrls = repaired;
+        await doc.ref.update({ imageUrls: repaired });
+      }
+    } catch {
+      // Repair is best-effort; the scan itself still renders.
+    }
 
     return Response.json({
       scanId: data.scanId,
@@ -47,7 +64,11 @@ export async function GET(
       result: data.result,
       text: data.text,
       createdAt: data.createdAt?.toMillis() ?? 0,
-      imageUrls: data.imageUrls ?? [],
+      imageUrls,
+      listingId: data.listingId ?? null,
+      listingStatus: data.listingStatus ?? null,
+      listingOfferCount: data.listingOfferCount ?? 0,
+      resaleEvaluatedAt: data.resaleEvaluatedAt?.toMillis() ?? null,
     });
   } catch (err) {
     console.error('[user/scans/:scanId] Firestore error', {
@@ -88,6 +109,8 @@ export async function DELETE(
 
     const scanData = scanSnap.data() as {
       result?: ScanResult;
+      listingId?: string;
+      listingStatus?: string;
     };
     const co2Kg = scanData.result?.cost?.co2_kg ?? 0;
     const waterLiters = scanData.result?.cost?.water_liters ?? 0;
@@ -100,6 +123,11 @@ export async function DELETE(
 
     const batch = db().batch();
     batch.delete(scanRef);
+    // Deleting a scan pulls any in-flight listing off the market atomically.
+    // Completed listings survive — they are the kickback ledger.
+    if (scanData.listingId && scanData.listingStatus && scanData.listingStatus !== 'completed' && scanData.listingStatus !== 'cancelled') {
+      batch.update(db().collection('listings').doc(scanData.listingId), { status: 'cancelled' });
+    }
     outcomeSnap.docs.forEach((doc) => batch.delete(doc.ref));
     batch.set(
       db().collection('users').doc(user.uid),
@@ -114,7 +142,7 @@ export async function DELETE(
 
     try {
       await adminStorage()
-        .bucket()
+        .bucket(storageBucketName())
         .deleteFiles({ prefix: `scans/${user.uid}/${scanId}/` });
     } catch (storageErr) {
       console.error('[user/scans/:scanId DELETE] storage cleanup failed', {
