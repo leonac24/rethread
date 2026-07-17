@@ -14,7 +14,7 @@ const mockDb = mock(() => ({ collection: mockCollection }));
 mock.module('../../lib/firebase/verify-token', () => ({
   verifyBearerToken: mockVerifyBearerToken,
 }));
-mock.module('../../lib/firebase/admin', () => ({ db: mockDb }));
+mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }) }));
 
 const { verifyApprovedRetailer } = await import('../../lib/firebase/verify-retailer');
 

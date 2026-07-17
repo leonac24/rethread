@@ -29,7 +29,7 @@ const mockDb = mock(() => ({
 mock.module('../../lib/firebase/verify-retailer', () => ({
   verifyApprovedRetailer: mockVerifyApprovedRetailer,
 }));
-mock.module('../../lib/firebase/admin', () => ({ db: mockDb }));
+mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }) }));
 
 const { GET } = await import('../../app/api/retailer/listings/route');
 

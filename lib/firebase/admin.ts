@@ -20,7 +20,18 @@ function getAdminApp(): App {
     throw new Error('FIREBASE_SERVICE_ACCOUNT_BASE64 is not valid base64-encoded JSON.');
   }
 
-  return initializeApp({ credential: cert(credentials as Parameters<typeof cert>[0]) });
+  // Without storageBucket, adminStorage().bucket() throws — server-side
+  // uploads and delete-cleanup both need it. Prefer the same bucket the
+  // client SDK uses; fall back to the project's legacy default name.
+  const projectId = (credentials as { project_id?: string }).project_id;
+  const storageBucket =
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ??
+    (projectId ? `${projectId}.appspot.com` : undefined);
+
+  return initializeApp({
+    credential: cert(credentials as Parameters<typeof cert>[0]),
+    ...(storageBucket ? { storageBucket } : {}),
+  });
 }
 
 export function adminAuth() {

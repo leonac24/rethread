@@ -89,7 +89,7 @@ mock.module('../../lib/rate-limit', () => ({
 mock.module('../../lib/firebase/verify-retailer', () => ({
   verifyApprovedRetailer: mockVerifyApprovedRetailer,
 }));
-mock.module('../../lib/firebase/admin', () => ({ db: mockDb }));
+mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }) }));
 mock.module('../../lib/shippo', () => ({
   purchaseLabel: mockPurchaseLabel,
   PARCEL_DEFAULTS: actualParcelDefaults,

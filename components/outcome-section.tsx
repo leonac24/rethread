@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth-context';
-import { uploadScanImages } from '@/lib/firebase/upload-scan-images';
 import type { EnvironmentalCost, GarmentCondition, OutcomeAction } from '@/types/garment';
 
 type Status = 'idle' | 'confirming' | 'loading' | 'done' | 'conflict' | 'error';
@@ -155,11 +154,19 @@ export function OutcomeSection({ id, cost, condition, onOutcomeRecorded }: Outco
             const parsed = JSON.parse(raw) as { previews?: string[] };
             const previews = Array.isArray(parsed.previews) ? parsed.previews : [];
             if (previews.length > 0) {
-              imageUrls = await uploadScanImages({
-                uid: firebaseUser.uid,
-                scanId: id,
-                dataUrls: previews,
+              // Server-side upload via the Admin SDK — client Storage-SDK
+              // uploads are blocked by default security rules.
+              const uploadRes = await fetch(`/api/scan/${id}/images`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ images: previews.slice(0, 4) }),
               });
+              if (uploadRes.ok) {
+                const uploaded = (await uploadRes.json()) as { imageUrls?: string[] };
+                imageUrls = uploaded.imageUrls ?? [];
+              } else {
+                console.error('[outcome-section] image upload failed', await uploadRes.text());
+              }
             }
           }
         } catch (err) {
