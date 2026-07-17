@@ -91,7 +91,7 @@ describe('GET /api/retailer/listings', () => {
     expect(body.error).toBe('Approved retailer account required.');
   });
 
-  it('strips estimate, ownerUid, scanId, shipFrom, and dropoffCode', async () => {
+  it('includes the appraisal but strips ownerUid, scanId, shipFrom, and dropoffCode', async () => {
     feedDocs = [{ id: 'listing123abc', data: listingDoc() }];
     const res = await GET(getReq());
     expect(res.status).toBe(200);
@@ -103,11 +103,21 @@ describe('GET /api/retailer/listings', () => {
     expect(item.condition).toBe('good');
     expect(item.imageUrls).toEqual(['https://img/1.jpg']);
     expect(item.createdAt).toBe(1_700_000_000_000);
-    expect('estimate' in item).toBe(false);
+    expect(item.estimate).toEqual({ low_usd: 6, high_usd: 10, confidence: 'medium', factors: [] });
     expect('ownerUid' in item).toBe(false);
     expect('scanId' in item).toBe(false);
     expect('shipFrom' in item).toBe(false);
     expect('dropoffCode' in item).toBe(false);
+  });
+
+  it('returns a null estimate when the listing has none or it is malformed', async () => {
+    feedDocs = [
+      { id: 'noEstimate123', data: listingDoc({ estimate: null }) },
+      { id: 'badEstimate12', data: listingDoc({ estimate: { low_usd: 'five', factors: 'nope' } }) },
+    ];
+    const res = await GET(getReq());
+    const body = await res.json();
+    expect(body.listings.every((l: { estimate: unknown }) => l.estimate === null)).toBe(true);
   });
 
   it('sorts by distance ascending with unlocated listings last', async () => {

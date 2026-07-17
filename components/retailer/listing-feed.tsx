@@ -12,6 +12,12 @@ type FeedListing = {
   garment: ListingGarment | null;
   imageUrls: string[];
   condition: string | null;
+  estimate: {
+    low_usd: number;
+    high_usd: number;
+    confidence: string;
+    factors: string[];
+  } | null;
   createdAt: number;
   distanceKm: number | null;
 };
@@ -99,6 +105,21 @@ function ListingCard({ listing }: { listing: FeedListing }) {
               </span>
             )}
           </div>
+          {listing.estimate && (
+            <div className="mt-2">
+              <p className="text-[13px] font-bold" style={{ color: '#5E8B6C' }}>
+                Appraised payout ${listing.estimate.low_usd}–${listing.estimate.high_usd}
+                <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                  {listing.estimate.confidence} confidence
+                </span>
+              </p>
+              {listing.estimate.factors.length > 0 && (
+                <p className="text-[12px] text-ink-faint mt-0.5 line-clamp-2">
+                  {listing.estimate.factors.join(' · ')}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

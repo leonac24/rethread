@@ -1,7 +1,8 @@
 // GET /api/retailer/listings
 // Active-listing feed for approved retailers, nearest-first from their store.
-// Strips estimate, ownerUid, scanId, shipFrom, and dropoffCode — retailers
-// never see the owner's identity, address, or the payout estimate.
+// Includes the appraised payout range + factors (so stores can offer quickly
+// and in the right bracket) but strips ownerUid, scanId, shipFrom, and
+// dropoffCode — retailers never see the owner's identity or address.
 
 import { verifyApprovedRetailer } from '@/lib/firebase/verify-retailer';
 import { db } from '@/lib/firebase/admin';
@@ -25,6 +26,21 @@ export async function GET(request: Request) {
     const listings = snap.docs.map((doc) => {
       const data = doc.data();
       const loc = data.approxLocation as { lat?: unknown; lng?: unknown } | null | undefined;
+      const est = data.estimate as
+        | { low_usd?: unknown; high_usd?: unknown; confidence?: unknown; factors?: unknown }
+        | null
+        | undefined;
+      const estimate =
+        est && typeof est.low_usd === 'number' && typeof est.high_usd === 'number'
+          ? {
+              low_usd: est.low_usd,
+              high_usd: est.high_usd,
+              confidence: typeof est.confidence === 'string' ? est.confidence : 'low',
+              factors: Array.isArray(est.factors)
+                ? est.factors.filter((f): f is string => typeof f === 'string')
+                : [],
+            }
+          : null;
       const distanceKm =
         retailer.lat !== null &&
         retailer.lng !== null &&
@@ -37,6 +53,7 @@ export async function GET(request: Request) {
         garment: data.garment ?? null,
         imageUrls: data.imageUrls ?? [],
         condition: data.garment?.condition ?? null,
+        estimate,
         createdAt: toMillis(data.createdAt),
         distanceKm,
       };
