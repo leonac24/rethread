@@ -1,13 +1,13 @@
 'use client';
 
 // Sell-to-a-local-store flow for closet items.
-// The resale estimate is computed at scan time but only revealed here, as an
-// "instant evaluation" — a short staged reveal that shows the reasoning, then
-// an ultraconservative payout range. Retailers never see this number.
+// The resale estimate is computed at scan time and revealed here instantly,
+// with the reasoning factors and an ultraconservative payout range.
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/lib/firebase/auth-context';
+import { useLiveRefresh } from '@/lib/use-live-refresh';
 import type { ResaleEstimate, ListingStatus } from '@/types/marketplace';
 
 const EVAL_STEPS = [
@@ -321,6 +321,9 @@ function ListedView({
 
   const status = detail?.status ?? initialStatus ?? 'active';
 
+  // New offers / acceptance / completion appear without a manual reload.
+  const liveTick = useLiveRefresh(12_000, !!listingId);
+
   useEffect(() => {
     let cancelled = false;
     if (!firebaseUser || !listingId) return;
@@ -344,7 +347,7 @@ function ListedView({
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser, listingId, refreshKey]);
+  }, [firebaseUser, listingId, refreshKey, liveTick]);
 
   async function handleCancel() {
     if (!firebaseUser || !listingId) return;

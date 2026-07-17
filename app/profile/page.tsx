@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/auth-context';
+import { useLiveRefresh } from '@/lib/use-live-refresh';
 import { LoadingScreen } from '@/components/loading-screen';
 import type { OutcomeAction, ScanResult } from '@/types/garment';
 import type { ResaleEstimate } from '@/types/marketplace';
@@ -491,6 +492,10 @@ export default function ProfilePage() {
     }
   }, [loading, user, router]);
 
+  // Live activity (new offers, sales) shows up without a manual reload —
+  // the closet re-fetches every 20s while visible and on tab focus.
+  const liveTick = useLiveRefresh(20_000, !!firebaseUser);
+
   useEffect(() => {
     let cancelled = false;
     if (!firebaseUser) {
@@ -501,22 +506,25 @@ export default function ProfilePage() {
       try {
         const token = await firebaseUser.getIdToken();
         const res = await fetch('/api/user/scans', {
+          cache: 'no-store',
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
-          if (!cancelled) setScans([]);
+          // Only fall back to empty on the initial load — a failed background
+          // refresh must not wipe an already-rendered closet.
+          if (!cancelled) setScans((prev) => prev ?? []);
           return;
         }
         const data = (await res.json()) as { scans: SavedScan[] };
         if (!cancelled) setScans(data.scans ?? []);
       } catch {
-        if (!cancelled) setScans([]);
+        if (!cancelled) setScans((prev) => prev ?? []);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser]);
+  }, [firebaseUser, liveTick]);
 
   const scanCount = user?.actionCount ?? 12;
   const currentTier = getTier(scanCount);
