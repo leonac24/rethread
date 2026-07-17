@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { LoadingScreen } from '@/components/loading-screen';
+import { ListingFeed } from '@/components/retailer/listing-feed';
+import { DealsTab } from '@/components/retailer/deals-tab';
 
 function GateCard({ title, body, cta }: { title: string; body: string; cta?: { href: string; label: string } }) {
   return (
@@ -27,6 +30,7 @@ function GateCard({ title, body, cta }: { title: string; body: string; cta?: { h
 
 export default function RetailerPage() {
   const { user, loading } = useAuth();
+  const [tab, setTab] = useState<'listings' | 'deals'>('listings');
 
   if (loading) {
     return <LoadingScreen blurbs={['Opening your storefront']} />;
@@ -62,8 +66,26 @@ export default function RetailerPage() {
             Browse locally listed garments and make offers.
           </p>
         </div>
-        {/* Listings feed + deals tabs land here (Tasks 8–10). */}
-        <p className="text-[14px] text-ink-faint">No listings to show yet.</p>
+        <div className="flex gap-2">
+          {(['listings', 'deals'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`rounded-full px-5 py-2 text-[13px] font-bold transition-colors cursor-pointer ${
+                tab === t
+                  ? 'bg-ink text-bg'
+                  : 'text-ink-muted border border-rule hover:bg-surface-sunk'
+              }`}
+            >
+              {t === 'listings' ? 'Listings' : 'My Deals'}
+            </button>
+          ))}
+        </div>
+
+        <div className="pb-8">
+          {tab === 'listings' ? <ListingFeed /> : <DealsTab />}
+        </div>
       </div>
     </main>
   );
