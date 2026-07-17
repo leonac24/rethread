@@ -39,6 +39,9 @@ export async function GET(
       text: string;
       createdAt?: FirebaseFirestore.Timestamp;
       imageUrls?: string[];
+      listingId?: string;
+      listingStatus?: string;
+      listingOfferCount?: number;
     };
 
     return Response.json({
@@ -48,6 +51,9 @@ export async function GET(
       text: data.text,
       createdAt: data.createdAt?.toMillis() ?? 0,
       imageUrls: data.imageUrls ?? [],
+      listingId: data.listingId ?? null,
+      listingStatus: data.listingStatus ?? null,
+      listingOfferCount: data.listingOfferCount ?? 0,
     });
   } catch (err) {
     console.error('[user/scans/:scanId] Firestore error', {
@@ -88,6 +94,8 @@ export async function DELETE(
 
     const scanData = scanSnap.data() as {
       result?: ScanResult;
+      listingId?: string;
+      listingStatus?: string;
     };
     const co2Kg = scanData.result?.cost?.co2_kg ?? 0;
     const waterLiters = scanData.result?.cost?.water_liters ?? 0;
@@ -100,6 +108,11 @@ export async function DELETE(
 
     const batch = db().batch();
     batch.delete(scanRef);
+    // Deleting a scan pulls any in-flight listing off the market atomically.
+    // Completed listings survive — they are the kickback ledger.
+    if (scanData.listingId && scanData.listingStatus && scanData.listingStatus !== 'completed' && scanData.listingStatus !== 'cancelled') {
+      batch.update(db().collection('listings').doc(scanData.listingId), { status: 'cancelled' });
+    }
     outcomeSnap.docs.forEach((doc) => batch.delete(doc.ref));
     batch.set(
       db().collection('users').doc(user.uid),

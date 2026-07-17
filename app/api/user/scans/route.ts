@@ -24,6 +24,9 @@ export async function GET(request: Request) {
         result: ScanResult;
         createdAt?: FirebaseFirestore.Timestamp;
         imageUrls?: string[];
+        listingId?: string;
+        listingStatus?: string;
+        listingOfferCount?: number;
       };
       return {
         scanId: data.scanId,
@@ -31,6 +34,9 @@ export async function GET(request: Request) {
         result: data.result,
         createdAt: data.createdAt?.toMillis() ?? 0,
         imageUrls: data.imageUrls ?? [],
+        listingId: data.listingId ?? null,
+        listingStatus: data.listingStatus ?? null,
+        listingOfferCount: data.listingOfferCount ?? 0,
       };
     });
 
