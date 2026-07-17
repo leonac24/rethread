@@ -3,8 +3,9 @@
 // Retailer-facing feed of active listings, nearest first.
 // Never shows the user's estimate — retailers set their own offers.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth-context';
+import { useLiveRefresh } from '@/lib/use-live-refresh';
 import type { ListingGarment } from '@/types/marketplace';
 
 type FeedListing = {
@@ -176,6 +177,10 @@ export function ListingFeed() {
   const [listings, setListings] = useState<FeedListing[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // New listings appear without a manual reload.
+  const liveTick = useLiveRefresh(25_000, !!firebaseUser);
+  const loadedOnce = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     if (!firebaseUser) return;
@@ -188,9 +193,15 @@ export function ListingFeed() {
         });
         const body = (await res.json().catch(() => ({}))) as { error?: string; listings?: FeedListing[] };
         if (!res.ok) throw new Error(body.error ?? 'Failed to load listings.');
-        if (!cancelled) setListings(body.listings ?? []);
-      } catch (err) {
         if (!cancelled) {
+          loadedOnce.current = true;
+          setListings(body.listings ?? []);
+          setError(null);
+        }
+      } catch (err) {
+        // Only surface a failure on the initial load — a failed background
+        // refresh must not wipe an already-rendered feed.
+        if (!cancelled && !loadedOnce.current) {
           setError(err instanceof Error ? err.message : 'Failed to load listings.');
           setListings([]);
         }
@@ -199,7 +210,7 @@ export function ListingFeed() {
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser]);
+  }, [firebaseUser, liveTick]);
 
   if (listings === null) {
     return <p className="text-[14px] text-ink-faint py-6">Loading listings…</p>;

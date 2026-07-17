@@ -4,8 +4,9 @@
 // label purchase for shipped deals, and mark-received completion.
 // Completed deals are the kickback ledger.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth-context';
+import { useLiveRefresh } from '@/lib/use-live-refresh';
 import type { ListingGarment, ShipFromAddress } from '@/types/marketplace';
 
 type Deal = {
@@ -149,6 +150,10 @@ export function DealsTab() {
   const [deals, setDeals] = useState<Deal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Newly accepted deals appear without a manual reload.
+  const liveTick = useLiveRefresh(25_000, !!firebaseUser);
+  const loadedOnce = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     if (!firebaseUser) return;
@@ -161,9 +166,15 @@ export function DealsTab() {
         });
         const body = (await res.json().catch(() => ({}))) as { error?: string; deals?: Deal[] };
         if (!res.ok) throw new Error(body.error ?? 'Failed to load deals.');
-        if (!cancelled) setDeals(body.deals ?? []);
-      } catch (err) {
         if (!cancelled) {
+          loadedOnce.current = true;
+          setDeals(body.deals ?? []);
+          setError(null);
+        }
+      } catch (err) {
+        // Only surface a failure on the initial load — a failed background
+        // refresh must not wipe already-rendered deals.
+        if (!cancelled && !loadedOnce.current) {
           setError(err instanceof Error ? err.message : 'Failed to load deals.');
           setDeals([]);
         }
@@ -172,7 +183,7 @@ export function DealsTab() {
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser]);
+  }, [firebaseUser, liveTick]);
 
   function handleUpdate(updated: Partial<Deal> & { id: string }) {
     setDeals((prev) => prev?.map((d) => (d.id === updated.id ? { ...d, ...updated } : d)) ?? null);
