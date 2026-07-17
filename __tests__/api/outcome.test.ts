@@ -22,7 +22,10 @@ const mockVerifyBearerToken = mock(async (_req: Request) => null);
 const mockBatchCommit = mock(async () => {});
 const mockBatchSet = mock(() => {});
 const mockBatch = mock(() => ({ set: mockBatchSet, commit: mockBatchCommit }));
-const mockDoc = mock(() => ({ id: 'new-doc-id' }));
+const mockDoc = mock(() => ({
+  id: 'new-doc-id',
+  collection: () => ({ doc: mockDoc }),
+}));
 const mockCollection = mock(() => ({ doc: mockDoc }));
 const mockDb = mock(() => ({ collection: mockCollection, batch: mockBatch }));
 
