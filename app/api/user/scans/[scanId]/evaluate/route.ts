@@ -6,7 +6,7 @@
 // tile and sell flow reuse them without re-paying for the call.
 
 import { verifyBearerToken } from '@/lib/firebase/verify-token';
-import { db, adminStorage } from '@/lib/firebase/admin';
+import { db, adminStorage, storageBucketName } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { evaluateResaleFromImages } from '@/lib/google/gemini';
@@ -53,7 +53,7 @@ export async function POST(
     const scanData = scanSnap.data() as { result?: ScanResult };
 
     const [files] = await adminStorage()
-      .bucket()
+      .bucket(storageBucketName())
       .getFiles({ prefix: `scans/${user.uid}/${scanId}/` });
 
     if (files.length === 0) {

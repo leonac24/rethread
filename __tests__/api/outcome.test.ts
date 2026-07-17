@@ -37,7 +37,7 @@ mock.module('../../lib/rate-limit', () => ({
 mock.module('../../lib/firebase/verify-token', () => ({
   verifyBearerToken: mockVerifyBearerToken,
 }));
-mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }) }));
+mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }), storageBucketName: () => 'test-bucket' }));
 mock.module('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'SERVER_TS', increment: (n: number) => ({ _increment: n }) },
 }));

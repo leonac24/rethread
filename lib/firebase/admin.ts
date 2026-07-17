@@ -45,3 +45,26 @@ export function db() {
 export function adminStorage() {
   return getStorage(getAdminApp());
 }
+
+// Resolve the bucket name independently of app-init options: the Admin app
+// singleton survives dev hot-reloads, so an instance created before
+// storageBucket was configured would otherwise poison every bucket() call.
+// Pass this explicitly: adminStorage().bucket(storageBucketName()).
+export function storageBucketName(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+  if (fromEnv) return fromEnv;
+
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (raw) {
+    try {
+      const { project_id } = JSON.parse(Buffer.from(raw, 'base64').toString('utf8')) as {
+        project_id?: string;
+      };
+      // New Firebase projects use the .firebasestorage.app default bucket.
+      if (project_id) return `${project_id}.firebasestorage.app`;
+    } catch {
+      // fall through
+    }
+  }
+  throw new Error('Cannot resolve storage bucket: set NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.');
+}

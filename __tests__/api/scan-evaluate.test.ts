@@ -46,10 +46,11 @@ mock.module('../../lib/firebase/verify-token', () => ({
 mock.module('../../lib/firebase/admin', () => ({
   db: mockDb,
   adminStorage: () => ({
-    bucket: () => ({
+    bucket: (_name?: string) => ({
       getFiles: async (_opts: unknown) => [storedFiles],
     }),
   }),
+  storageBucketName: () => 'test-bucket',
 }));
 mock.module('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'SERVER_TS', increment: (n: number) => ({ _increment: n }) },

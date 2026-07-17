@@ -1,5 +1,5 @@
 import { verifyBearerToken } from '@/lib/firebase/verify-token';
-import { db, adminStorage } from '@/lib/firebase/admin';
+import { db, adminStorage, storageBucketName } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import type { OutcomeAction, ScanResult } from '@/types/garment';
 
@@ -129,7 +129,7 @@ export async function DELETE(
 
     try {
       await adminStorage()
-        .bucket()
+        .bucket(storageBucketName())
         .deleteFiles({ prefix: `scans/${user.uid}/${scanId}/` });
     } catch (storageErr) {
       console.error('[user/scans/:scanId DELETE] storage cleanup failed', {

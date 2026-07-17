@@ -27,7 +27,7 @@ const mockDb = mock(() => ({
   }),
 }));
 
-mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }) }));
+mock.module('../../lib/firebase/admin', () => ({ db: mockDb, adminStorage: () => ({ bucket: () => ({}) }), storageBucketName: () => 'test-bucket' }));
 
 const { GET } = await import('../../app/api/admin/retailers/route');
 const { POST } = await import('../../app/api/admin/retailers/[uid]/approve/route');

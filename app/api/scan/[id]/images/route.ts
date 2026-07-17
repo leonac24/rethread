@@ -5,7 +5,7 @@
 // matching how every other write in this app works.
 
 import { verifyBearerToken } from '@/lib/firebase/verify-token';
-import { adminStorage } from '@/lib/firebase/admin';
+import { adminStorage, storageBucketName } from '@/lib/firebase/admin';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -69,18 +69,27 @@ export async function POST(
   }
 
   try {
-    const bucket = adminStorage().bucket();
+    const bucket = adminStorage().bucket(storageBucketName());
     const imageUrls = await Promise.all(
       parsed.map(async ({ buffer }, index) => {
         const path = `scans/${user.uid}/${id}/${index}.jpg`;
         const token = crypto.randomUUID();
-        await bucket.file(path).save(buffer, {
+        const file = bucket.file(path);
+        await file.save(buffer, {
           contentType: 'image/jpeg',
           metadata: { metadata: { firebaseStorageDownloadTokens: token } },
         });
-        // Standard Firebase download URL — same host the app already allows
-        // in next.config images.remotePatterns.
-        return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+        // Prefer a public GCS URL: Firebase's tokenized download endpoint
+        // (firebasestorage.googleapis.com) requires the Blaze plan on new
+        // projects and 402s otherwise, while direct GCS serving works.
+        try {
+          await file.makePublic();
+          return `https://storage.googleapis.com/${bucket.name}/${path}`;
+        } catch {
+          // Uniform bucket-level access blocks per-object ACLs — fall back
+          // to the Firebase download-token URL.
+          return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+        }
       }),
     );
 
