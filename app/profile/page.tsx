@@ -13,6 +13,8 @@ type SavedScan = {
   result: ScanResult;
   createdAt: number;
   imageUrls?: string[];
+  listingStatus?: string | null;
+  listingOfferCount?: number;
 };
 
 type ClosetTile = {
@@ -22,7 +24,20 @@ type ClosetTile = {
   action: OutcomeAction;
   date: string;
   imageUrls: string[];
+  saleTag: { label: string; color: string } | null;
 };
+
+// Small pill on the tile when the item is in the marketplace.
+function getSaleTag(status: string | null | undefined, offerCount: number): { label: string; color: string } | null {
+  if (status === 'active') {
+    return offerCount > 0
+      ? { label: 'Offer', color: '#5E8B6C' }
+      : { label: 'For Sale', color: '#C9983E' };
+  }
+  if (status === 'accepted') return { label: 'Sale Pending', color: '#B07D2E' };
+  if (status === 'completed') return { label: 'Sold', color: '#5E8B6C' };
+  return null;
+}
 
 const ACTION_BADGE: Record<OutcomeAction, { label: string; color: string }> = {
   donate: { label: 'Donated', color: '#5E8B6C' },      // green — best
@@ -67,6 +82,7 @@ function ClosetItem({
   action,
   date,
   imageUrls,
+  saleTag,
   onRequestDelete,
 }: ClosetTile & { onRequestDelete: () => void }) {
   const imgSrc = imageUrls[0] ?? '/images/garment.webp';
@@ -95,6 +111,14 @@ function ClosetItem({
             className="w-full h-full object-contain"
           />
         </div>
+        {saleTag && (
+          <span
+            className="absolute top-1.5 left-1.5 z-20 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+            style={{ backgroundColor: saleTag.color }}
+          >
+            {saleTag.label}
+          </span>
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -296,6 +320,7 @@ export default function ProfilePage() {
       action: scan.action,
       date,
       imageUrls: scan.imageUrls ?? [],
+      saleTag: getSaleTag(scan.listingStatus, scan.listingOfferCount ?? 0),
     };
   });
 

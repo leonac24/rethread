@@ -13,7 +13,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { OutcomeAction, RouteOption, ScanResult } from '@/types/garment';
+import type { ListingStatus } from '@/types/marketplace';
 import { OutcomeSection } from '@/components/outcome-section';
+import { SellSection } from '@/components/sell-section';
 import { LoadingScreen } from '@/components/loading-screen';
 import { useAuth } from '@/lib/firebase/auth-context';
 
@@ -143,6 +145,8 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
     text: string;
     result: ScanResult;
     previews?: string[];
+    listingId?: string | null;
+    listingStatus?: ListingStatus | null;
   } | null>(null);
   const [savedAction, setSavedAction] = useState<OutcomeAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +208,8 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
           result?: ScanResult;
           text?: string;
           imageUrls?: string[];
+          listingId?: string | null;
+          listingStatus?: ListingStatus | null;
         };
         if (!response.ok || !payload.result || typeof payload.text !== 'string') {
           throw new Error(payload.error ?? 'Result not found.');
@@ -213,6 +219,8 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
             text: payload.text,
             result: payload.result,
             previews: payload.imageUrls?.length ? payload.imageUrls : undefined,
+            listingId: payload.listingId ?? null,
+            listingStatus: payload.listingStatus ?? null,
           });
           if (payload.action) setSavedAction(payload.action);
         }
@@ -721,6 +729,16 @@ export function ResultView({ id, readOnly = false }: ResultViewProps) {
                 cost={data.result.cost}
                 condition={data.result.garment.condition}
                 onOutcomeRecorded={setSavedAction}
+              />
+            )}
+
+            {/* ── Sell It (closet items only) ──────────────────────── */}
+            {readOnly && savedAction !== 'throw_away' && (
+              <SellSection
+                scanId={id}
+                resale={data.result.cost.resale ?? null}
+                listingId={data.listingId ?? null}
+                listingStatus={data.listingStatus ?? null}
               />
             )}
 
