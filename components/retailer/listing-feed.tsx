@@ -30,9 +30,10 @@ type OfferState =
 
 function fiberString(garment: ListingGarment | null): string {
   const fibers = garment?.fibers ?? [];
-  return fibers.length
-    ? fibers.map((f) => `${f.percentage}% ${f.material}`).join(' / ')
-    : 'Unknown fiber';
+  if (!fibers.length) return 'Unknown fiber';
+  const str = fibers.map((f) => `${f.percentage}% ${f.material}`).join(' / ');
+  // "Est." = composition AI-estimated from photos, not read from a label.
+  return garment?.fibers_estimated ? `Est. ${str}` : str;
 }
 
 function ListingCard({ listing }: { listing: FeedListing }) {

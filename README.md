@@ -76,7 +76,7 @@ All API calls run server-side. The browser never holds a key. Scan results are s
 #### 2. One Gemini super call — `analyzeGarment`
 
 - A single multimodal, schema-enforced request receives **every photo** (labels + garment) plus the OCR text and returns the entire analysis at once:
-  - **Identification** — fibers, country of origin, brand (luxury houses included), category, color, condition (`poor | fair | good | excellent`).
+  - **Identification** — fibers, country of origin, brand (luxury houses included), category, color, condition (`poor | fair | good | excellent`). When no fiber label is readable, Gemini estimates the likely mixed composition from the photos (e.g. sneakers → polyester mesh / rubber / EVA foam) and flags it `fibers_estimated` — the UI marks these as an AI guess everywhere fibers appear.
   - **Dye analysis** — pollution score (1–10), likely dye family, reasoning.
   - **Disposal** — CO₂, landfill years, one-line note.
   - **Landfill impact** — `{ summary, microplastics, methane, dye_runoff, breakdown_years }`.

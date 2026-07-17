@@ -46,6 +46,8 @@ export type ListingGarment = {
   color?: string;
   condition?: GarmentCondition;
   fibers: Fiber[];
+  /** Composition was AI-estimated from photos, not read from a label. */
+  fibers_estimated?: boolean;
 };
 
 export type Offer = {

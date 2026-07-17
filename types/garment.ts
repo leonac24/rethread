@@ -11,6 +11,9 @@ export type GarmentCondition = 'poor' | 'fair' | 'good' | 'excellent';
 
 export type Garment = {
   fibers: Fiber[];
+  /** True when no readable fiber label existed and the composition is Gemini's
+   *  best guess from the photos (e.g. sneakers → mesh/rubber/foam). */
+  fibers_estimated?: boolean;
   origin: string | null;
   category: string | null;
   brand?: string;

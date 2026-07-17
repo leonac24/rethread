@@ -72,6 +72,7 @@ export async function POST(request: Request) {
     const garmentSrc = scanData.result?.garment;
     const garment: ListingGarment = {
       fibers: garmentSrc?.fibers ?? [],
+      ...(garmentSrc?.fibers_estimated ? { fibers_estimated: true } : {}),
       ...(garmentSrc?.brand ? { brand: garmentSrc.brand } : {}),
       ...(garmentSrc?.category ? { category: garmentSrc.category } : {}),
       ...(garmentSrc?.color ? { color: garmentSrc.color } : {}),

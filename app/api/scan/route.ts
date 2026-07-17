@@ -194,6 +194,7 @@ async function handleScan(request: Request, reqLog: ReqLog, traceId: string) {
     const g = analysis.garment;
     garment = {
       fibers: g.fibers,
+      ...(g.fibers_estimated ? { fibers_estimated: true } : {}),
       origin: g.origin,
       category: g.category,
       ...(g.brand ? { brand: g.brand } : {}),

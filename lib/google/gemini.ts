@@ -131,6 +131,8 @@ export type AnalyzedGarment = {
   condition: GarmentCondition | null;
   origin: string | null;
   fibers: Fiber[];
+  /** True when the composition was inferred from appearance, not read from a label. */
+  fibers_estimated: boolean;
 };
 
 export type GarmentAnalysis = {
@@ -206,7 +208,12 @@ function buildAnalysisPrompt(ocrText: string | undefined, known: Garment | null 
     '  VI/CV -> viscose, LI -> linen, SE -> silk, CLY -> lyocell, CMD -> modal).',
     '  If the label has multiple sections (SHELL, LINING, TRIM, FILL), use ONLY the primary/largest section.',
     '  Do not confuse washing temperatures (30, 40, 60) or weights (200gsm) with fiber percentages.',
-    '  Return an empty array if composition is not readable.',
+    '  When the composition IS readable from a label, set fibers_estimated = false.',
+    '  When NO readable composition exists, ESTIMATE the most likely blend from the garment type and',
+    '  visible materials, and set fibers_estimated = true. Mixed, multi-component constructions are',
+    '  expected — e.g. sneakers might be 40% polyester, 30% rubber, 20% eva foam, 10% cotton; a leather',
+    '  jacket 80% leather, 20% polyester. For non-textile components use "rubber", "leather",',
+    '  "faux leather", "suede", "eva foam". Return an empty array only if you cannot infer anything.',
     '',
     '## DYE ANALYSIS',
     'Score dye_pollution_score (1-10) from fiber blend + color + origin country:',
@@ -289,7 +296,7 @@ export async function analyzeGarment(
           responseSchema: {
             type: 'OBJECT',
             required: [
-              'brand', 'category', 'color', 'condition', 'origin', 'fibers', 'confidence',
+              'brand', 'category', 'color', 'condition', 'origin', 'fibers', 'fibers_estimated', 'confidence',
               'dye_pollution_score', 'reasoning',
               'disposal_co2_kg', 'disposal_landfill_years', 'disposal_note',
               'landfill_summary', 'landfill_microplastics', 'landfill_methane', 'landfill_dye_runoff', 'landfill_breakdown_years',
@@ -312,6 +319,7 @@ export async function analyzeGarment(
                   },
                 },
               },
+              fibers_estimated: { type: 'BOOLEAN' },
               confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
               dye_pollution_score: { type: 'NUMBER' },
               dye_type: { type: 'STRING' },
@@ -366,6 +374,8 @@ export async function analyzeGarment(
   const str = (v: unknown, max: number) =>
     typeof v === 'string' && v.trim() ? sanitizeResponseText(v.trim(), max) : null;
 
+  const fibers = normalizeFibers(r.fibers);
+
   return {
     garment: {
       brand: str(r.brand, 80),
@@ -376,7 +386,8 @@ export async function analyzeGarment(
           ? (r.condition as GarmentCondition)
           : null,
       origin: str(r.origin, 60),
-      fibers: normalizeFibers(r.fibers),
+      fibers,
+      fibers_estimated: fibers.length > 0 && r.fibers_estimated === true,
     },
     cost: dye,
     landfill: {

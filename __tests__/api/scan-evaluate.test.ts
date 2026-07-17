@@ -16,6 +16,7 @@ const ANALYSIS = {
     condition: 'good' as const,
     origin: 'Italy',
     fibers: [{ material: 'cotton', percentage: 100 }],
+    fibers_estimated: true,
   },
   cost: {
     dye_pollution_score: 5,
@@ -170,6 +171,7 @@ describe('POST /api/user/scans/[scanId]/evaluate', () => {
     expect(u['result.garment.brand']).toBe('Miu Miu');
     expect(u['result.garment.origin']).toBe('Italy');
     expect(u['result.garment.fibers']).toEqual(ANALYSIS.garment.fibers);
+    expect(u['result.garment.fibers_estimated']).toBe(true);
     expect(u['result.landfill_impact']).toEqual(ANALYSIS.landfill);
     expect(u['result.fti']).toEqual(FTI);
     expect(u.resaleEvaluatedAt).toBe('SERVER_TS');
@@ -188,6 +190,7 @@ describe('POST /api/user/scans/[scanId]/evaluate', () => {
     const cost = u['result.cost'] as Record<string, unknown>;
     expect(cost.water_liters).toBe(16);
     expect(u['result.garment.fibers']).toBeUndefined();
+    expect(u['result.garment.fibers_estimated']).toBeUndefined();
   });
 
   it('502 when Gemini fails, nothing persisted', async () => {

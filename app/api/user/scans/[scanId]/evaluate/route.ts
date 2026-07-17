@@ -105,7 +105,10 @@ export async function POST(
     if (analysis.garment.color) updates['result.garment.color'] = analysis.garment.color;
     if (analysis.garment.condition) updates['result.garment.condition'] = analysis.garment.condition;
     if (analysis.garment.origin) updates['result.garment.origin'] = analysis.garment.origin;
-    if (analysis.garment.fibers.length) updates['result.garment.fibers'] = analysis.garment.fibers;
+    if (analysis.garment.fibers.length) {
+      updates['result.garment.fibers'] = analysis.garment.fibers;
+      updates['result.garment.fibers_estimated'] = analysis.garment.fibers_estimated;
+    }
     if (fti) updates['result.fti'] = fti;
     await scanRef.update(updates);
 

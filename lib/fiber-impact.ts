@@ -42,6 +42,11 @@ const FIBER_IMPACT: Record<string, FiberImpact> = {
   hemp:               { water:    300, co2: 1.5  },
   elastane:           { water:    100, co2: 8.0  },
   down:               { water:  2_000, co2: 5.0  },
+  // Non-textile components (AI-estimated compositions for shoes, jackets, …)
+  leather:            { water: 17_000, co2: 33.0 },
+  faux_leather:       { water:     80, co2: 4.5  },
+  rubber:             { water:     30, co2: 3.0  },
+  foam:               { water:     60, co2: 5.0  },
 };
 
 // Fallback for unrecognized fibers — uses a mid-range synthetic estimate.
@@ -92,6 +97,11 @@ function normalizeKey(material: string): string {
   if (m.includes('hemp')) return 'hemp';
   if (m.includes('elastane') || m.includes('spandex') || m.includes('lycra')) return 'elastane';
   if (m.includes('down') || m.includes('feather') || m.includes('goose') || m.includes('duck')) return 'down';
+  // Non-textile components — faux/vegan leather must match before real leather.
+  if (m.includes('polyurethane') || ((m.includes('faux') || m.includes('vegan') || m.includes('synthetic')) && m.includes('leather'))) return 'faux_leather';
+  if (m.includes('leather') || m.includes('suede')) return 'leather';
+  if (m.includes('rubber')) return 'rubber';
+  if (m.includes('foam') || m.includes('eva')) return 'foam';
   return '';
 }
 

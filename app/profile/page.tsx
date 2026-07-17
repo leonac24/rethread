@@ -533,7 +533,9 @@ export default function ProfilePage() {
     const fibers = scan.result.garment.fibers ?? [];
     const fiberStr =
       fibers.length > 0
-        ? fibers.map((f) => `${f.percentage}% ${f.material}`).join(' / ')
+        ? `${scan.result.garment.fibers_estimated ? 'Est. ' : ''}${fibers
+            .map((f) => `${f.percentage}% ${f.material}`)
+            .join(' / ')}`
         : 'Unknown fiber';
     const label =
       scan.result.garment.category ?? scan.result.garment.brand ?? 'Garment';

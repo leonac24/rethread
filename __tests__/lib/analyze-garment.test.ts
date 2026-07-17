@@ -27,6 +27,7 @@ const GOOD_PAYLOAD = {
     { material: 'Cotton', percentage: 60 },
     { material: 'Polyester', percentage: 20 },
   ],
+  fibers_estimated: false,
   confidence: 'high',
   dye_pollution_score: 15,
   dye_type: 'synthetic reactive dye',
@@ -80,6 +81,7 @@ describe('analyzeGarment', () => {
       { material: 'cotton', percentage: 75 },
       { material: 'polyester', percentage: 25 },
     ]);
+    expect(analysis.garment.fibers_estimated).toBe(false);
 
     // Dye/disposal: score clamped to 10, disposal rounded.
     expect(analysis.cost.dye_pollution_score).toBe(10);
@@ -128,6 +130,31 @@ describe('analyzeGarment', () => {
     const analysis = await analyzeGarment([{ mimeType: 'image/jpeg', data: 'aW1n' }]);
     expect(analysis.resale).toBeNull();
     expect(analysis.garment.brand).toBe('Miu Miu');
+  });
+
+  it('flags an AI-guessed mixed composition as estimated', async () => {
+    responseText = geminiBody({
+      ...GOOD_PAYLOAD,
+      fibers: [
+        { material: 'Polyester', percentage: 40 },
+        { material: 'Rubber', percentage: 30 },
+        { material: 'EVA foam', percentage: 20 },
+        { material: 'Cotton', percentage: 10 },
+      ],
+      fibers_estimated: true,
+    });
+    const analysis = await analyzeGarment([{ mimeType: 'image/jpeg', data: 'aW1n' }]);
+    expect(analysis.garment.fibers_estimated).toBe(true);
+    expect(analysis.garment.fibers.map((f) => f.material)).toEqual([
+      'polyester', 'rubber', 'eva foam', 'cotton',
+    ]);
+  });
+
+  it('estimated flag is meaningless without fibers — forced to false', async () => {
+    responseText = geminiBody({ ...GOOD_PAYLOAD, fibers: [], fibers_estimated: true });
+    const analysis = await analyzeGarment([{ mimeType: 'image/jpeg', data: 'aW1n' }]);
+    expect(analysis.garment.fibers).toEqual([]);
+    expect(analysis.garment.fibers_estimated).toBe(false);
   });
 
   it('invalid condition and blank identity fields become null', async () => {
