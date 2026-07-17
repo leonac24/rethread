@@ -20,3 +20,6 @@ export const BIGQUERY_TIMEOUT_MS = 10_000;
 
 // ─── Gemini ────────────────────────────────────────────────────────────────
 export const GEMINI_TIMEOUT_MS = 20_000;
+
+// ─── Shippo ────────────────────────────────────────────────────────────────
+export const SHIPPO_TIMEOUT_MS = 20_000;
