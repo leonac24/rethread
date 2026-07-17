@@ -117,6 +117,45 @@ async function nearest(
   };
 }
 
+// Geocode a free-form address to coordinates via Places searchText.
+// Returns null on ANY failure (missing key, HTTP error, timeout, no result) — never throws.
+export async function geocodeAddress(
+  address: string,
+): Promise<{ lat: number; lng: number } | null> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch(SEARCH_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(8_000),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.location',
+      },
+      body: JSON.stringify({
+        textQuery: address,
+        maxResultCount: 1,
+      }),
+    });
+
+    if (!res.ok) {
+      log.error('Places geocode failed', undefined, { stage: 'geocode', status: res.status });
+      return null;
+    }
+
+    const data = (await res.json()) as PlacesResponse;
+    const location = data.places?.[0]?.location;
+    if (!location) return null;
+
+    return { lat: location.latitude, lng: location.longitude };
+  } catch (err) {
+    log.error('Places geocode failed', err, { stage: 'geocode' });
+    return null;
+  }
+}
+
 function todayIndex(): number {
   // Places API weekdayDescriptions is indexed 0=Monday..6=Sunday.
   // JS Date.getDay() is 0=Sunday..6=Saturday.
