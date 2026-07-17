@@ -242,8 +242,23 @@ export function SellSection({ scanId, resale, listingId, listingStatus }: SellSe
   );
 }
 
-// Live-listing view. Task 9 extends this with the offers list + accept flow;
-// for now it shows the live state and lets the owner pull the listing.
+type OfferItem = {
+  id: string;
+  storeName: string;
+  amountUsd: number;
+  note?: string;
+  status: string;
+};
+
+type ListingDetail = {
+  status: ListingStatus;
+  fulfillment: 'dropoff' | 'ship' | null;
+  dropoffCode: string | null;
+  shipping: { labelUrl: string; trackingNumber: string; carrier: string } | null;
+};
+
+// Live-listing view: offers list, accept flow (drop-off vs ship), and
+// post-acceptance state (pickup code / shipping label).
 function ListedView({
   listingId,
   initialStatus,
@@ -256,6 +271,39 @@ function ListedView({
   const { firebaseUser } = useAuth();
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offers, setOffers] = useState<OfferItem[]>([]);
+  const [detail, setDetail] = useState<ListingDetail | null>(null);
+  const [acceptTarget, setAcceptTarget] = useState<OfferItem | null>(null);
+  const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
+  const [dropoffCode, setDropoffCode] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const status = detail?.status ?? initialStatus ?? 'active';
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!firebaseUser || !listingId) return;
+    (async () => {
+      try {
+        const token = await firebaseUser.getIdToken();
+        const res = await fetch(`/api/listings/${listingId}`, {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as { listing: ListingDetail; offers: OfferItem[] };
+        if (cancelled) return;
+        setDetail(body.listing);
+        setOffers(body.offers);
+        if (body.listing.dropoffCode) setDropoffCode(body.listing.dropoffCode);
+      } catch {
+        // Listing detail is progressive enhancement — the tag view still works.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, listingId, refreshKey]);
 
   async function handleCancel() {
     if (!firebaseUser || !listingId) return;
@@ -281,6 +329,115 @@ function ListedView({
     }
   }
 
+  async function handleDecline(offer: OfferItem) {
+    if (!firebaseUser || !listingId) return;
+    setBusyOfferId(offer.id);
+    setError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/listings/${listingId}/offers/${offer.id}/decline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? 'Failed to decline offer.');
+      setOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, status: 'declined' } : o)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to decline offer.');
+    } finally {
+      setBusyOfferId(null);
+    }
+  }
+
+  async function handleAccept(offer: OfferItem, fulfillment: 'dropoff' | 'ship', shipFrom?: Record<string, string>) {
+    if (!firebaseUser || !listingId) return;
+    setBusyOfferId(offer.id);
+    setError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/listings/${listingId}/offers/${offer.id}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ fulfillment, ...(shipFrom ? { shipFrom } : {}) }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; dropoffCode?: string };
+      if (!res.ok) throw new Error(body.error ?? 'Failed to accept offer.');
+      if (body.dropoffCode) setDropoffCode(body.dropoffCode);
+      setAcceptTarget(null);
+      setRefreshKey((k) => k + 1);
+      setDetail((d) => (d ? { ...d, status: 'accepted', fulfillment } : d));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to accept offer.');
+    } finally {
+      setBusyOfferId(null);
+    }
+  }
+
+  const openOffers = offers.filter((o) => o.status === 'open');
+  const acceptedOffer = offers.find((o) => o.status === 'accepted');
+
+  if (status === 'accepted') {
+    return (
+      <div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-bold"
+            style={{ backgroundColor: '#B07D2E18', color: '#B07D2E' }}
+          >
+            <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#B07D2E' }} />
+            Sale Pending
+          </span>
+          <p className="text-[15px] text-ink-muted">
+            {acceptedOffer
+              ? `You accepted ${acceptedOffer.storeName}'s offer of $${acceptedOffer.amountUsd}.`
+              : 'You accepted an offer on this garment.'}
+          </p>
+        </div>
+
+        {detail?.fulfillment === 'dropoff' && dropoffCode && (
+          <div className="mt-4 rounded-xl bg-bg p-4 text-center">
+            <p className="text-[11px] font-bold tracking-[0.12em] uppercase text-ink-muted mb-1">
+              Your pickup code
+            </p>
+            <p className="text-[28px] font-black text-ink tracking-[0.3em]">{dropoffCode}</p>
+            <p className="text-[12px] text-ink-faint mt-1">
+              Show this code at the store when you drop off the garment.
+            </p>
+          </div>
+        )}
+
+        {detail?.fulfillment === 'ship' && (
+          <div className="mt-4 rounded-xl bg-bg p-4">
+            {detail.shipping ? (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1">
+                  <p className="text-[14px] font-semibold text-ink">Shipping label ready</p>
+                  <p className="text-[12px] text-ink-muted mt-0.5">
+                    {detail.shipping.carrier} · Tracking {detail.shipping.trackingNumber}
+                  </p>
+                </div>
+                <a
+                  href={detail.shipping.labelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-xl bg-ink text-bg px-5 py-2.5 text-[13px] font-semibold text-center transition-opacity hover:opacity-85"
+                >
+                  Download label
+                </a>
+              </div>
+            ) : (
+              <p className="text-[14px] text-ink-muted">
+                Waiting for the store to send your shipping label — check back soon.
+              </p>
+            )}
+          </div>
+        )}
+        {error && <p className="text-[13px] text-danger mt-2">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex items-center gap-2">
@@ -289,15 +446,52 @@ function ListedView({
           style={{ backgroundColor: '#C9983E18', color: '#C9983E' }}
         >
           <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#C9983E' }} />
-          {initialStatus === 'accepted' ? 'Sale Pending' : 'For Sale'}
+          For Sale
         </span>
         <p className="text-[15px] text-ink-muted">
-          {initialStatus === 'accepted'
-            ? 'You accepted an offer on this garment.'
+          {openOffers.length > 0
+            ? `${openOffers.length} offer${openOffers.length > 1 ? 's' : ''} waiting for you.`
             : 'Your item is live. Local stores can now make offers.'}
         </p>
       </div>
-      {initialStatus === 'active' && listingId && (
+
+      {openOffers.length > 0 && (
+        <div className="mt-4 space-y-2.5">
+          {openOffers.map((offer) => (
+            <div key={offer.id} className="rounded-xl bg-bg p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-semibold text-ink truncate">{offer.storeName}</p>
+                  {offer.note && (
+                    <p className="text-[13px] text-ink-muted mt-0.5 line-clamp-2">{offer.note}</p>
+                  )}
+                </div>
+                <p className="text-[24px] font-black text-ink flex-shrink-0">${offer.amountUsd}</p>
+              </div>
+              <div className="flex gap-2.5 mt-3">
+                <button
+                  type="button"
+                  onClick={() => handleDecline(offer)}
+                  disabled={busyOfferId !== null}
+                  className="flex-1 rounded-xl py-2.5 text-[14px] font-semibold text-ink-muted border border-rule transition-colors hover:bg-surface-sunk disabled:opacity-50 cursor-pointer disabled:cursor-default"
+                >
+                  Decline
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAcceptTarget(offer)}
+                  disabled={busyOfferId !== null}
+                  className="flex-1 rounded-xl py-2.5 text-[14px] font-semibold text-bg bg-ink transition-opacity hover:opacity-85 disabled:opacity-50 cursor-pointer disabled:cursor-default"
+                >
+                  Accept
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {listingId && (
         <button
           type="button"
           onClick={handleCancel}
@@ -308,6 +502,128 @@ function ListedView({
         </button>
       )}
       {error && <p className="text-[13px] text-danger mt-2">{error}</p>}
+
+      {acceptTarget && (
+        <AcceptModal
+          offer={acceptTarget}
+          busy={busyOfferId !== null}
+          onClose={() => setAcceptTarget(null)}
+          onAccept={handleAccept}
+        />
+      )}
+    </div>
+  );
+}
+
+function AcceptModal({
+  offer,
+  busy,
+  onClose,
+  onAccept,
+}: {
+  offer: OfferItem;
+  busy: boolean;
+  onClose: () => void;
+  onAccept: (offer: OfferItem, fulfillment: 'dropoff' | 'ship', shipFrom?: Record<string, string>) => void;
+}) {
+  const [method, setMethod] = useState<'dropoff' | 'ship' | null>(null);
+  const [addr, setAddr] = useState({ name: '', street1: '', city: '', state: '', zip: '' });
+  const addrValid =
+    addr.name.trim() !== '' &&
+    addr.street1.trim() !== '' &&
+    addr.city.trim() !== '' &&
+    addr.state.trim() !== '' &&
+    /^\d{5}(-\d{4})?$/.test(addr.zip.trim());
+
+  function input(field: keyof typeof addr, placeholder: string, className = '') {
+    return (
+      <input
+        type="text"
+        value={addr[field]}
+        onChange={(e) => setAddr((a) => ({ ...a, [field]: e.target.value }))}
+        placeholder={placeholder}
+        className={`w-full rounded-xl border border-rule bg-bg px-3.5 py-2.5 text-[14px] text-ink placeholder:text-ink-faint focus:outline-none focus:border-ink-muted ${className}`}
+      />
+    );
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Accept offer"
+      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
+    >
+      <div
+        className="bg-surface rounded-2xl p-5 max-w-sm w-full"
+        style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.2)' }}
+      >
+        <p className="text-[16px] font-semibold text-ink mb-1">
+          Accept ${offer.amountUsd} from {offer.storeName}?
+        </p>
+        <p className="text-[14px] text-ink-muted mb-4">
+          Choose how the garment gets to the store. Other open offers will be declined.
+        </p>
+
+        <div className="grid grid-cols-2 gap-2.5 mb-4">
+          <button
+            type="button"
+            onClick={() => setMethod('dropoff')}
+            className={`rounded-xl border p-3 text-left transition-colors cursor-pointer ${method === 'dropoff' ? 'border-ink bg-surface-sunk' : 'border-rule hover:bg-surface-sunk'}`}
+          >
+            <p className="text-[14px] font-semibold text-ink">Drop it off</p>
+            <p className="text-[12px] text-ink-muted mt-0.5">You&apos;ll get a pickup code to show in store.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMethod('ship')}
+            className={`rounded-xl border p-3 text-left transition-colors cursor-pointer ${method === 'ship' ? 'border-ink bg-surface-sunk' : 'border-rule hover:bg-surface-sunk'}`}
+          >
+            <p className="text-[14px] font-semibold text-ink">Ship it</p>
+            <p className="text-[12px] text-ink-muted mt-0.5">The store sends you a prepaid label.</p>
+          </button>
+        </div>
+
+        {method === 'ship' && (
+          <div className="space-y-2 mb-4">
+            {input('name', 'Full name')}
+            {input('street1', 'Street address')}
+            <div className="flex gap-2">
+              {input('city', 'City', 'flex-[2]')}
+              {input('state', 'State', 'flex-1')}
+              {input('zip', 'ZIP', 'flex-1')}
+            </div>
+            <p className="text-[11px] text-ink-faint">
+              Your address is only shared with {offer.storeName} for the shipping label.
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="flex-1 rounded-xl py-3 text-[15px] font-semibold text-ink-muted border border-rule transition-colors hover:bg-surface-sunk disabled:opacity-50 cursor-pointer disabled:cursor-default"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (method === 'dropoff') onAccept(offer, 'dropoff');
+              else if (method === 'ship' && addrValid) onAccept(offer, 'ship', addr);
+            }}
+            disabled={busy || method === null || (method === 'ship' && !addrValid)}
+            className="flex-1 rounded-xl py-3 text-[15px] font-semibold text-bg bg-ink transition-opacity hover:opacity-85 disabled:opacity-50 cursor-pointer disabled:cursor-default"
+          >
+            {busy ? 'Accepting…' : 'Accept offer'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
