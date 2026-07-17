@@ -1,11 +1,13 @@
-import type { EnvironmentalCost, Garment, GarmentCondition, LandfillImpact, ResaleEstimate } from '@/types/garment';
+import type { EnvironmentalCost, Fiber, Garment, GarmentCondition, LandfillImpact, ResaleEstimate } from '@/types/garment';
 import { log } from '@/lib/logger';
 import { GEMINI_TIMEOUT_MS } from '@/lib/config';
 import { withRetry, HttpError } from '@/lib/retry';
-import { computeFiberImpact } from '@/lib/fiber-impact';
 
-// Gemini — structured environmental-cost reasoning + garment image analysis.
-// Enforce responseSchema so output always matches expected types.
+// Gemini — one multimodal "super call" per garment. A single structured-output
+// request handles identification (brand/category/color/condition/origin/fibers),
+// dye and disposal analysis, landfill impact, and the resale appraisal.
+// Water and CO2 are NOT estimated here — they come from the fiber lookup table
+// (Textile Exchange / Water Footprint Network LCA data) via computeFiberImpact.
 
 type GeminiResponse = {
   candidates?: Array<{
@@ -35,63 +37,6 @@ function sanitizeResponseText(s: string, maxLen = 200): string {
     .replace(/[^\x20-\x7E]/g, '')
     .slice(0, maxLen)
     .trim();
-}
-
-function buildPrompt(garment: Garment, brandContext?: string) {
-  const safeGarment = {
-    fibers: garment.fibers.map((f) => ({
-      material: sanitizeForPrompt(f.material),
-      percentage: f.percentage,
-    })),
-    origin: sanitizeForPrompt(garment.origin ?? undefined),
-    category: sanitizeForPrompt(garment.category ?? undefined),
-    brand: sanitizeForPrompt(garment.brand),
-    color: sanitizeForPrompt(garment.color),
-  };
-
-  return [
-    'You are a textile dye and pollution analyst.',
-    'Water and CO2 figures have already been calculated from a lookup table — do NOT estimate them.',
-    'Your job is to assess dye pollution risk and write a brief environmental summary.',
-    'Focus on: fiber blend + color + origin country + brand transparency.',
-    'Keep reasoning under 80 words. Return only valid JSON matching schema.',
-    '',
-    '--- GARMENT DATA (user-provided) ---',
-    JSON.stringify(safeGarment),
-    '--- END GARMENT DATA ---',
-    '',
-    brandContext ? `Brand context: ${sanitizeForPrompt(brandContext, 500)}` : 'Brand context: none',
-    '',
-    'Scoring guidance for dye_pollution_score (1–10):',
-    '- Synthetic dyes (reactive, disperse, acid) on synthetic or blended fibers: higher risk (6–9)',
-    '- Natural or low-impact dyes on natural fibers: lower risk (1–4)',
-    '- Mixed fibers often require multiple dye types: moderate–high risk',
-    '- Weak wastewater controls in origin country increase risk',
-    '- High brand transparency score (>60) may indicate better dye practices',
-    '',
-    'If a color is present in the garment data, identify the most likely dye family used to achieve it',
-    '(e.g. "synthetic reactive dye", "vat dye", "acid dye", "natural indigo", "disperse dye") and',
-    'include reasoning about its environmental impact in dye_type and dye_reasoning.',
-    'If no color is present, omit dye_type and dye_reasoning.',
-    '',
-    'Also estimate the environmental impact if this garment is discarded:',
-    '- disposal_co2_kg: CO2 released via landfill decomposition or incineration (number)',
-    '- disposal_landfill_years: estimated years to decompose in landfill (integer)',
-    '- disposal_note: one sentence summarising disposal impact, max 40 words',
-    '',
-    'Also estimate the resale payout a thrift/consignment store would PAY THE OWNER for this garment, in USD:',
-    '- Thrift stores pay roughly 20-30% of what they can resell the item for.',
-    '- BE ULTRACONSERVATIVE: round DOWN, and when brand, condition, or category is uncertain, go lower.',
-    '- A disappointing-low estimate is fine; an optimistic-high estimate is a failure.',
-    '- resale_low_usd / resale_high_usd: integers, low >= 1. Keep the range tight (high <= 2x low).',
-    '- resale_factors: 2-4 short phrases (max 8 words each) a shopper would understand,',
-    '  e.g. "denim resells strongly", "fast-fashion brand limits payout", "good condition".',
-    '',
-    'Set confidence based on how much information is available:',
-    '- high: fiber blend + color + origin all known',
-    '- medium: some fields missing',
-    '- low: most fields unknown',
-  ].join('\n');
 }
 
 type DyeAnalysis = {
@@ -139,7 +84,7 @@ function normalizeDyeAnalysis(value: unknown): DyeAnalysis {
 
 // Normalize the resale payout estimate from a Gemini response.
 // Returns null rather than throwing — resale is an optional enrichment,
-// never a reason to fail the whole cost computation.
+// never a reason to fail the whole analysis.
 export function normalizeResaleEstimate(value: unknown): ResaleEstimate | null {
   if (!value || typeof value !== 'object') return null;
 
@@ -179,365 +124,116 @@ function geminiHeaders(apiKey: string): Record<string, string> {
   };
 }
 
-export async function computeCost(
-  garment: Garment,
-  brandContext?: string,
-): Promise<EnvironmentalCost> {
-  // Water and CO2 come from the fiber lookup table — real LCA data, not AI estimates.
-  const { water_liters, co2_kg, coverage } = computeFiberImpact(garment.fibers, garment.category);
-  log.info('Fiber impact calculated', {
-    stage: 'cost',
-    fibers: garment.fibers.map((f) => `${f.percentage}% ${f.material}`).join(', '),
-    category: garment.category ?? 'unknown',
-    water_liters,
-    co2_kg,
-    coverage_pct: Math.round(coverage * 100),
-  });
-
-  // Gemini handles only dye pollution scoring and reasoning.
-  const apiKey = getApiKey();
-  const prompt = buildPrompt(garment, brandContext);
-  const hasDyeFields = !!garment.color;
-
-  const data = await withRetry(async () => {
-    const response = await fetch(GEMINI_ENDPOINT, {
-      method: 'POST',
-      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-      headers: geminiHeaders(apiKey),
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            required: ['dye_pollution_score', 'confidence', 'reasoning', 'disposal_co2_kg', 'disposal_landfill_years', 'disposal_note', 'resale_low_usd', 'resale_high_usd', 'resale_factors'],
-            properties: {
-              dye_pollution_score: { type: 'NUMBER' },
-              confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
-              reasoning: { type: 'STRING' },
-              disposal_co2_kg: { type: 'NUMBER' },
-              disposal_landfill_years: { type: 'NUMBER' },
-              disposal_note: { type: 'STRING' },
-              resale_low_usd: { type: 'NUMBER' },
-              resale_high_usd: { type: 'NUMBER' },
-              resale_factors: { type: 'ARRAY', items: { type: 'STRING' } },
-              ...(hasDyeFields
-                ? {
-                    dye_type: { type: 'STRING' },
-                    dye_reasoning: { type: 'STRING' },
-                  }
-                : {}),
-            },
-          },
-        },
-      }),
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      log.error('Gemini cost request failed', undefined, { stage: 'cost', status: response.status });
-      throw new HttpError(response.status, `Gemini request failed (${response.status}): ${text}`);
-    }
-    return response.json() as Promise<GeminiResponse>;
-  }, { retries: 3, label: 'Gemini' });
-
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) throw new Error('Gemini returned no content.');
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    throw new Error(`Gemini returned non-JSON content: ${rawText}`);
-  }
-
-  const dye = normalizeDyeAnalysis(parsed);
-
-  // Resale estimate is schema-required, but normalize defensively — a bad
-  // resale block should never sink the rest of the cost result.
-  const raw = parsed as Record<string, unknown>;
-  const resale = normalizeResaleEstimate({
-    low_usd: raw.resale_low_usd,
-    high_usd: raw.resale_high_usd,
-    confidence: dye.confidence,
-    factors: raw.resale_factors,
-  });
-
-  return {
-    water_liters,
-    co2_kg,
-    ...dye,
-    ...(resale ? { resale } : {}),
-  };
-}
-
-export type GarmentImageAnalysis = {
+export type AnalyzedGarment = {
+  brand: string | null;
   category: string | null;
   color: string | null;
   condition: GarmentCondition | null;
-};
-
-export async function computeLandfillImpact(garment: Garment): Promise<LandfillImpact> {
-  const apiKey = getApiKey();
-
-  const fiberList = garment.fibers.length
-    ? garment.fibers.map((f) => `${f.percentage}% ${f.material}`).join(', ')
-    : 'unknown composition';
-
-  const prompt = [
-    'You are an environmental scientist specializing in textile waste.',
-    `A garment made of ${fiberList}${garment.category ? ` (${garment.category})` : ''}${garment.origin ? `, manufactured in ${garment.origin},` : ''} is about to be thrown in the trash and sent to landfill.`,
-    'Write a factual, fiber-specific analysis of the environmental damage this causes.',
-    'Cover exactly four areas:',
-    '1. microplastics — which fibers shed microplastics, how they leach into soil and groundwater',
-    '2. methane — decomposition timeline and methane/greenhouse gas output from organic fibers',
-    '3. dye_runoff — toxic dye and chemical runoff from this specific fiber blend and likely dye types into soil and water',
-    '4. breakdown_years — realistic range of years for this specific fiber blend to break down in landfill',
-    'Also write a one-sentence summary of the overall landfill impact (under 40 words).',
-    'STRICT: microplastics, methane, dye_runoff, and breakdown_years must each be under 100 characters. Write complete short sentences — do not exceed the limit.',
-    'Be specific to the fiber blend. breakdown_years should be a short string like "200–500 years" or "20–30 years".',
-    'Return only valid JSON matching the schema.',
-  ].join(' ');
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            required: ['summary', 'microplastics', 'methane', 'dye_runoff', 'breakdown_years'],
-            properties: {
-              summary: { type: 'STRING' },
-              microplastics: { type: 'STRING' },
-              methane: { type: 'STRING' },
-              dye_runoff: { type: 'STRING' },
-              breakdown_years: { type: 'STRING' },
-            },
-          },
-        },
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Gemini landfill impact failed (${response.status}): ${text}`);
-  }
-
-  const data = (await response.json()) as GeminiResponse;
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) throw new Error('Gemini returned no content for landfill impact.');
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    throw new Error(`Gemini returned non-JSON for landfill impact: ${rawText}`);
-  }
-
-  const r = parsed as Record<string, unknown>;
-  return {
-    summary: String(r.summary ?? ''),
-    microplastics: String(r.microplastics ?? ''),
-    methane: String(r.methane ?? ''),
-    dye_runoff: String(r.dye_runoff ?? ''),
-    breakdown_years: String(r.breakdown_years ?? ''),
-  };
-}
-
-export type LabelParseResult = {
-  brand: string | null;
-  fibers: Array<{ material: string; percentage: number }>;
   origin: string | null;
-  category: string | null;
+  fibers: Fiber[];
 };
 
-export async function parseLabelWithGemini(ocrText: string): Promise<LabelParseResult> {
-  const apiKey = getApiKey();
+export type GarmentAnalysis = {
+  garment: AnalyzedGarment;
+  /** Dye + disposal analysis — water/CO2 are added by the caller from the fiber lookup table. */
+  cost: Omit<EnvironmentalCost, 'water_liters' | 'co2_kg' | 'resale'>;
+  landfill: LandfillImpact;
+  resale: ResaleEstimate | null;
+};
 
-  const prompt = [
-    'You are an expert clothing label parser. Extract structured garment data from raw OCR text.',
-    'The OCR text may be messy — apply all of the following corrections and rules carefully.',
-    '',
-    '## OCR NOISE & ARTIFACTS',
-    '- Trademark/copyright symbols are often misread: ® → "B", "R", or "®"; © → "C"; ™ → "TM" or "M".',
-    '  Strip these from brand names (e.g. "BNEW BALANCE" → "New Balance", "RNIKE" → "Nike").',
-    '- Characters may be merged with no space (e.g. "3%ELASTANE" → 3% elastane).',
-    '- Letters may be OCR-swapped: 0/O, 1/I/l, 5/S, 8/B, etc. Use context to correct.',
-    '- Garbled or unreadable segments should be ignored rather than guessed.',
-    '',
-    '## BRAND',
-    '- Find the brand/manufacturer name. It is usually prominent, near the top, and not part of care or composition text.',
-    '- Correct OCR artifacts as described above.',
-    '- Ignore distributor lines like "Distributed by", "Imported by", "Exclusively for".',
-    '- If multiple brand names appear, prefer the most prominent or first one.',
-    '- Return null if no brand can be confidently identified.',
-    '',
-    '## FIBER COMPOSITION',
-    '- Extract fibers as { material, percentage } pairs. Percentages must sum to 100.',
-    '- Use canonical English fiber names: "cotton", "polyester", "elastane", "nylon", "wool",',
-    '  "viscose", "linen", "silk", "acrylic", "modal", "lyocell", "cashmere", "down", "hemp", "spandex".',
-    '- Translate non-English fiber names to English:',
-    '  French: coton→cotton, polyester, laine→wool, soie→silk, lin→linen, viscose, élasthanne→elastane',
-    '  Spanish: algodón→cotton, lana→wool, seda→silk, lino→linen, poliéster→polyester',
-    '  Italian: cotone→cotton, lana→wool, seta→silk, lino→linen, poliestere→polyester',
-    '  German: Baumwolle→cotton, Wolle→wool, Seide→silk, Leinen→linen, Polyester',
-    '- Recognize ISO fiber abbreviations: CO→cotton, PES→polyester, WO→wool, PA→nylon,',
-    '  EL→elastane, VI→viscose, LI→linen, SE→silk, CV→viscose, CLY→lyocell, CMD→modal',
-    '- If the label has multiple sections (e.g. SHELL, BODY, LINING, TRIM, FILL, EXCLUSIVE OF DECORATION),',
-    '  use ONLY the primary/largest section (usually labeled SHELL or BODY, or the first section listed).',
-    '  Ignore secondary sections entirely — do not mix fibers from different sections.',
-    '- "Exclusive of decoration/ornamentation/trim" is boilerplate — ignore it.',
-    '- If percentages do not sum to 100 due to OCR error, scale them proportionally.',
-    '- Decimal percentages (e.g. 98.5%) should be rounded to the nearest integer.',
-    '- Do not confuse washing temperatures (30, 40, 60) or garment weights (200gsm) with fiber percentages.',
-    '',
-    '## ORIGIN',
-    '- Find the country of manufacture. Look for: "Made in X", "Fabricado en X", "Fabriqué en X",',
-    '  "Fatto in X", "Hergestellt in X", "Made in X", or just a country name near those phrases.',
-    '- Translate to English (e.g. "États-Unis"→"USA", "Deutschland"→"Germany", "Chine"→"China").',
-    '- Return the country name only (e.g. "China", "USA", "Bangladesh"), not the full phrase.',
-    '- Return null if not found.',
-    '',
-    '## CATEGORY',
-    '- Infer the garment type from any descriptive text, style names, or context clues.',
-    '- Use one of: "t-shirt", "shirt", "blouse", "jeans", "pants", "shorts", "skirt", "dress",',
-    '  "jacket", "coat", "hoodie", "sweater", "leggings", "socks", "underwear", "bra", "shoes".',
-    '- Return null if the category cannot be confidently determined.',
-    '',
-    '## RULES',
-    '- Never invent data not present or strongly implied by the text.',
-    '- Return null for any field you cannot confidently extract.',
-    '- Return only valid JSON matching the schema.',
-    '',
-    '--- RAW OCR TEXT ---',
-    ocrText.slice(0, 2000),
-    '--- END OCR TEXT ---',
-  ].join('\n');
-
-  const data = await withRetry(async () => {
-    const response = await fetch(GEMINI_ENDPOINT, {
-      method: 'POST',
-      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-      headers: geminiHeaders(apiKey),
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            required: ['brand', 'fibers', 'origin', 'category'],
-            properties: {
-              brand:    { type: 'STRING', nullable: true },
-              origin:   { type: 'STRING', nullable: true },
-              category: { type: 'STRING', nullable: true },
-              fibers: {
-                type: 'ARRAY',
-                items: {
-                  type: 'OBJECT',
-                  required: ['material', 'percentage'],
-                  properties: {
-                    material:   { type: 'STRING' },
-                    percentage: { type: 'NUMBER' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      }),
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      throw new HttpError(response.status, `Gemini label parse failed (${response.status}): ${text}`);
-    }
-    return response.json() as Promise<GeminiResponse>;
-  }, { retries: 2, label: 'Gemini label parse' });
-
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) throw new Error('Gemini returned no content for label parse.');
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    throw new Error(`Gemini returned non-JSON for label parse: ${rawText}`);
-  }
-
-  const r = parsed as Record<string, unknown>;
-
-  const rawFibers = Array.isArray(r.fibers) ? r.fibers : [];
-  const fibers = rawFibers
+function normalizeFibers(value: unknown): Fiber[] {
+  const raw = Array.isArray(value) ? value : [];
+  const fibers = raw
     .filter((f): f is { material: string; percentage: number } =>
       f && typeof f.material === 'string' && typeof f.percentage === 'number'
     )
     .map((f) => ({
       material: f.material.toLowerCase().trim(),
       percentage: Math.max(0, Math.min(100, Math.round(f.percentage))),
-    }));
+    }))
+    .filter((f) => f.material.length > 0);
 
-  // Normalize percentages to sum to 100 if Gemini didn't
+  // Normalize percentages to sum to 100 if Gemini didn't.
   const total = fibers.reduce((s, f) => s + f.percentage, 0);
   if (total > 0 && total !== 100) {
     for (const f of fibers) f.percentage = Math.round((f.percentage / total) * 100);
   }
-
-  return {
-    brand:    typeof r.brand === 'string' && r.brand ? r.brand.trim() : null,
-    origin:   typeof r.origin === 'string' && r.origin ? r.origin.trim() : null,
-    category: typeof r.category === 'string' && r.category ? r.category.trim() : null,
-    fibers,
-  };
+  return fibers;
 }
 
-export type ResaleEvaluation = {
-  brand: string | null;
-  category: string | null;
-  color: string | null;
-  condition: GarmentCondition | null;
-  resale: ResaleEstimate | null;
-};
+// Landfill text is display-only prose; keep unicode (e.g. "200–500 years")
+// but strip markup and cap length.
+function landfillText(v: unknown, max = 300): string {
+  return typeof v === 'string' ? v.replace(/<[^>]*>/g, '').trim().slice(0, max) : '';
+}
 
-// Full image-based resale appraisal for the listing flow. Unlike the scan-time
-// estimate (text-only, OCR-derived), this sees the actual photos — so brand
-// labels, logos, and true condition inform the payout. A Miu Miu polo should
-// price like Miu Miu, not like an unknown-brand polo.
-export async function evaluateResaleFromImages(
-  images: Array<{ mimeType: string; data: string }>,
-  garment?: Garment | null,
-): Promise<ResaleEvaluation> {
-  const apiKey = getApiKey();
-
-  const knownContext = garment
+function buildAnalysisPrompt(ocrText: string | undefined, known: Garment | null | undefined): string {
+  const knownContext = known
     ? JSON.stringify({
-        brand: sanitizeForPrompt(garment.brand),
-        category: sanitizeForPrompt(garment.category ?? undefined),
-        color: sanitizeForPrompt(garment.color),
-        condition: garment.condition ?? null,
-        fibers: garment.fibers.map((f) => ({
+        brand: sanitizeForPrompt(known.brand),
+        category: sanitizeForPrompt(known.category ?? undefined),
+        color: sanitizeForPrompt(known.color),
+        condition: known.condition ?? null,
+        origin: sanitizeForPrompt(known.origin ?? undefined),
+        fibers: known.fibers.map((f) => ({
           material: sanitizeForPrompt(f.material),
           percentage: f.percentage,
         })),
       })
     : 'none';
 
-  const prompt = [
-    'You are an expert secondhand-clothing appraiser for a resale marketplace.',
-    'Examine the attached photos of a garment (and its care/brand labels, if shown) and do a full appraisal.',
+  return [
+    'You are an expert secondhand-clothing appraiser AND textile environmental analyst for a resale app.',
+    'Examine the attached photos of a garment (including any care/brand labels) and produce a complete,',
+    'internally consistent analysis: identification, dye and disposal impact, landfill impact, and a resale payout.',
+    'Water and CO2 footprints are computed separately from a lookup table (Textile Exchange / Water Footprint',
+    'Network data) — do NOT estimate them.',
     '',
     '## IDENTIFY',
-    '- brand: read brand names from labels, tags, logos, or embroidery. Recognize designer and',
-    '  luxury houses (e.g. Miu Miu, Prada, Gucci, Ralph Lauren) as readily as mass-market brands.',
-    '  Return null only if no brand is visible or inferable.',
-    '- category: garment type (e.g. "polo", "jeans", "dress", "jacket").',
+    '- brand: read brand names from labels, tags, logos, or embroidery. Recognize designer and luxury houses',
+    '  (e.g. Miu Miu, Prada, Gucci, Ralph Lauren) as readily as mass-market brands. OCR text may garble',
+    '  trademark symbols into stray letters ("BNEW BALANCE" -> "New Balance"). Ignore "Distributed by" /',
+    '  "Imported by" lines. Return null only if no brand is visible or inferable.',
+    '- category: garment type (e.g. "polo", "t-shirt", "jeans", "dress", "jacket").',
     '- color: dominant color as a descriptive name.',
     '- condition: visible wear — "poor" | "fair" | "good" | "excellent".',
+    '- origin: country of manufacture from "Made in X" (translate to English, country name only), else null.',
+    '- fibers: composition as { material, percentage } pairs summing to 100.',
+    '  Use canonical English fiber names: "cotton", "polyester", "elastane", "nylon", "wool", "viscose",',
+    '  "linen", "silk", "acrylic", "modal", "lyocell", "cashmere", "down", "hemp", "spandex".',
+    '  Translate non-English names (coton/algodon/cotone/Baumwolle -> cotton; laine/lana/Wolle -> wool; etc.)',
+    '  and ISO abbreviations (CO -> cotton, PES -> polyester, WO -> wool, PA -> nylon, EL -> elastane,',
+    '  VI/CV -> viscose, LI -> linen, SE -> silk, CLY -> lyocell, CMD -> modal).',
+    '  If the label has multiple sections (SHELL, LINING, TRIM, FILL), use ONLY the primary/largest section.',
+    '  Do not confuse washing temperatures (30, 40, 60) or weights (200gsm) with fiber percentages.',
+    '  Return an empty array if composition is not readable.',
     '',
-    '## PRICE (resale payout, USD)',
+    '## DYE ANALYSIS',
+    'Score dye_pollution_score (1-10) from fiber blend + color + origin country:',
+    '- Synthetic dyes (reactive, disperse, acid) on synthetic or blended fibers: higher risk (6-9)',
+    '- Natural or low-impact dyes on natural fibers: lower risk (1-4)',
+    '- Mixed fibers often require multiple dye types: moderate-high risk',
+    '- Weak wastewater controls in the origin country increase risk',
+    'If a color is identifiable, set dye_type to the most likely dye family used to achieve it',
+    '(e.g. "synthetic reactive dye", "vat dye", "acid dye", "natural indigo", "disperse dye") and explain its',
+    'environmental impact in dye_reasoning. Omit both if no color is discernible.',
+    'reasoning: a brief environmental summary, under 80 words.',
+    '',
+    '## DISPOSAL',
+    '- disposal_co2_kg: CO2 released via landfill decomposition or incineration (number)',
+    '- disposal_landfill_years: estimated years to decompose in landfill (integer)',
+    '- disposal_note: one sentence summarising disposal impact, max 40 words',
+    '',
+    '## LANDFILL IMPACT',
+    'Fiber-specific analysis of what happens if this garment is landfilled:',
+    '- landfill_microplastics: which fibers shed microplastics and how they leach into soil/groundwater',
+    '- landfill_methane: decomposition timeline and methane/greenhouse output from organic fibers',
+    '- landfill_dye_runoff: toxic dye and chemical runoff from this blend and its likely dyes',
+    '- landfill_breakdown_years: realistic range like "200-500 years" for this specific blend',
+    '- landfill_summary: one-sentence overall landfill impact, under 40 words',
+    'STRICT: microplastics, methane, dye_runoff, and breakdown_years must each be under 100 characters.',
+    '',
+    '## RESALE (payout, USD)',
     'Estimate what a resale/consignment store would PAY THE OWNER for this garment:',
     '- Mass-market and fast-fashion brands: stores pay roughly 20-30% of their resale price.',
     '- Designer and luxury brands hold real value: consignment payouts run 30-40% of realistic',
@@ -549,7 +245,12 @@ export async function evaluateResaleFromImages(
     '- resale_factors: 2-4 short phrases a shopper would understand,',
     '  e.g. "Miu Miu resells strongly", "light wear on collar", "polos are steady sellers".',
     '',
-    'Set confidence: high (brand label clearly readable + condition visible), medium (partial), low (guessing).',
+    'Set confidence: high (label clearly readable + condition visible), medium (partial), low (guessing).',
+    'The identification, environmental analysis, and price must all describe the SAME garment.',
+    '',
+    '--- RAW LABEL OCR TEXT (auxiliary; may be noisy or empty) ---',
+    (ocrText ?? '').slice(0, 2000) || 'none',
+    '--- END OCR TEXT ---',
     '',
     '--- PREVIOUSLY SCANNED DATA (may be incomplete or wrong; trust the photos over it) ---',
     knownContext,
@@ -557,6 +258,16 @@ export async function evaluateResaleFromImages(
     '',
     'Return only valid JSON matching the schema.',
   ].join('\n');
+}
+
+// The one Gemini call per garment. Used at scan time (with OCR text) and by the
+// closet "Sell It" re-appraisal (with the previously scanned garment as hints).
+export async function analyzeGarment(
+  images: Array<{ mimeType: string; data: string }>,
+  opts: { ocrText?: string; knownGarment?: Garment | null } = {},
+): Promise<GarmentAnalysis> {
+  const apiKey = getApiKey();
+  const prompt = buildAnalysisPrompt(opts.ocrText, opts.knownGarment);
 
   const data = await withRetry(async () => {
     const response = await fetch(GEMINI_ENDPOINT, {
@@ -577,13 +288,43 @@ export async function evaluateResaleFromImages(
           responseMimeType: 'application/json',
           responseSchema: {
             type: 'OBJECT',
-            required: ['brand', 'category', 'color', 'condition', 'confidence', 'resale_low_usd', 'resale_high_usd', 'resale_factors'],
+            required: [
+              'brand', 'category', 'color', 'condition', 'origin', 'fibers', 'confidence',
+              'dye_pollution_score', 'reasoning',
+              'disposal_co2_kg', 'disposal_landfill_years', 'disposal_note',
+              'landfill_summary', 'landfill_microplastics', 'landfill_methane', 'landfill_dye_runoff', 'landfill_breakdown_years',
+              'resale_low_usd', 'resale_high_usd', 'resale_factors',
+            ],
             properties: {
               brand: { type: 'STRING', nullable: true },
               category: { type: 'STRING', nullable: true },
               color: { type: 'STRING', nullable: true },
               condition: { type: 'STRING', enum: ['poor', 'fair', 'good', 'excellent'], nullable: true },
+              origin: { type: 'STRING', nullable: true },
+              fibers: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  required: ['material', 'percentage'],
+                  properties: {
+                    material: { type: 'STRING' },
+                    percentage: { type: 'NUMBER' },
+                  },
+                },
+              },
               confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+              dye_pollution_score: { type: 'NUMBER' },
+              dye_type: { type: 'STRING' },
+              dye_reasoning: { type: 'STRING' },
+              reasoning: { type: 'STRING' },
+              disposal_co2_kg: { type: 'NUMBER' },
+              disposal_landfill_years: { type: 'NUMBER' },
+              disposal_note: { type: 'STRING' },
+              landfill_summary: { type: 'STRING' },
+              landfill_microplastics: { type: 'STRING' },
+              landfill_methane: { type: 'STRING' },
+              landfill_dye_runoff: { type: 'STRING' },
+              landfill_breakdown_years: { type: 'STRING' },
               resale_low_usd: { type: 'NUMBER' },
               resale_high_usd: { type: 'NUMBER' },
               resale_factors: { type: 'ARRAY', items: { type: 'STRING' } },
@@ -594,24 +335,26 @@ export async function evaluateResaleFromImages(
     });
     if (!response.ok) {
       const text = await response.text();
-      log.error('Gemini resale evaluation failed', undefined, { stage: 'evaluate', status: response.status });
-      throw new HttpError(response.status, `Gemini resale evaluation failed (${response.status}): ${text}`);
+      log.error('Gemini garment analysis failed', undefined, { stage: 'analyze', status: response.status });
+      throw new HttpError(response.status, `Gemini garment analysis failed (${response.status}): ${text}`);
     }
     return response.json() as Promise<GeminiResponse>;
-  }, { retries: 2, label: 'Gemini-evaluate' });
+  }, { retries: 2, label: 'Gemini-analyze' });
 
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) throw new Error('Gemini returned no content for resale evaluation.');
+  if (!rawText) throw new Error('Gemini returned no content for garment analysis.');
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
   } catch {
-    throw new Error(`Gemini returned non-JSON for resale evaluation: ${rawText}`);
+    throw new Error(`Gemini returned non-JSON for garment analysis: ${rawText}`);
   }
 
   const r = parsed as Record<string, unknown>;
   const VALID_CONDITIONS = new Set<string>(['poor', 'fair', 'good', 'excellent']);
+
+  const dye = normalizeDyeAnalysis(parsed);
 
   const resale = normalizeResaleEstimate({
     low_usd: r.resale_low_usd,
@@ -620,94 +363,29 @@ export async function evaluateResaleFromImages(
     factors: r.resale_factors,
   });
 
+  const str = (v: unknown, max: number) =>
+    typeof v === 'string' && v.trim() ? sanitizeResponseText(v.trim(), max) : null;
+
   return {
-    brand: typeof r.brand === 'string' && r.brand ? sanitizeResponseText(r.brand.trim(), 80) : null,
-    category: typeof r.category === 'string' && r.category ? sanitizeResponseText(r.category.trim(), 60) : null,
-    color: typeof r.color === 'string' && r.color ? sanitizeResponseText(r.color.trim(), 60) : null,
-    condition:
-      typeof r.condition === 'string' && VALID_CONDITIONS.has(r.condition)
-        ? (r.condition as GarmentCondition)
-        : null,
+    garment: {
+      brand: str(r.brand, 80),
+      category: str(r.category, 60),
+      color: str(r.color, 60),
+      condition:
+        typeof r.condition === 'string' && VALID_CONDITIONS.has(r.condition)
+          ? (r.condition as GarmentCondition)
+          : null,
+      origin: str(r.origin, 60),
+      fibers: normalizeFibers(r.fibers),
+    },
+    cost: dye,
+    landfill: {
+      summary: landfillText(r.landfill_summary),
+      microplastics: landfillText(r.landfill_microplastics),
+      methane: landfillText(r.landfill_methane),
+      dye_runoff: landfillText(r.landfill_dye_runoff),
+      breakdown_years: landfillText(r.landfill_breakdown_years, 60),
+    },
     resale,
-  };
-}
-
-export async function analyzeGarmentImage(
-  imageBuffer: Buffer,
-  mimeType = 'image/jpeg',
-): Promise<GarmentImageAnalysis> {
-  const apiKey = getApiKey();
-
-  const base64Image = imageBuffer.toString('base64');
-
-  const prompt = [
-    'Analyze this clothing item image.',
-    'Identify the garment category (e.g. "shirt", "pants", "dress", "jacket", "shoes", "shorts", "skirt", "sweater", "coat").',
-    'Identify the dominant color as a descriptive name (e.g. "navy blue", "burgundy", "off-white", "forest green").',
-    'Assess the visible wear condition: "poor" (significant damage, stains, or tears), "fair" (minor wear or fading), "good" (lightly used), "excellent" (like new).',
-    'Return only valid JSON matching the schema.',
-  ].join(' ');
-
-  const data = await withRetry(async () => {
-    const response = await fetch(GEMINI_ENDPOINT, {
-      method: 'POST',
-      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-      headers: geminiHeaders(apiKey),
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { inlineData: { mimeType, data: base64Image } },
-              { text: prompt },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            required: ['category', 'color', 'condition'],
-            properties: {
-              category: { type: 'STRING' },
-              color: { type: 'STRING' },
-              condition: { type: 'STRING', enum: ['poor', 'fair', 'good', 'excellent'] },
-            },
-          },
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      log.error('Gemini image analysis failed', undefined, { stage: 'ingest', status: response.status });
-      throw new HttpError(response.status, `Gemini image analysis failed (${response.status}): ${text}`);
-    }
-
-    return response.json() as Promise<GeminiResponse>;
-  }, { retries: 3, label: 'Gemini-image' });
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) throw new Error('Gemini returned no content for image analysis.');
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    throw new Error(`Gemini returned non-JSON for image analysis: ${rawText}`);
-  }
-
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Gemini image analysis response is not an object.');
-  }
-
-  const VALID_CONDITIONS = new Set<string>(['poor', 'fair', 'good', 'excellent']);
-  const result = parsed as Record<string, unknown>;
-  return {
-    category: typeof result.category === 'string' && result.category ? result.category : null,
-    color: typeof result.color === 'string' && result.color ? result.color : null,
-    condition:
-      typeof result.condition === 'string' && VALID_CONDITIONS.has(result.condition)
-        ? (result.condition as GarmentCondition)
-        : null,
   };
 }

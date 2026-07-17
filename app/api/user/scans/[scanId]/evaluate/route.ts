@@ -1,15 +1,19 @@
 // POST /api/user/scans/[scanId]/evaluate
-// Fresh image-based resale appraisal for the closet "Sell It" flow.
-// Downloads the scan's stored photos, has Gemini re-identify the garment
-// (brand labels included — the scan-time estimate never saw the images) and
-// price the payout. Results are persisted onto the scan doc so the closet
-// tile and sell flow reuse them without re-paying for the call.
+// Fresh image-based appraisal for the closet "Sell It" flow.
+// Downloads the scan's stored photos and runs the same Gemini super call as
+// scan time — identification, dye/disposal, landfill, and resale payout — then
+// persists the WHOLE refreshed result (garment identity, eco cost recomputed
+// from the corrected fibers, landfill impact, FTI, appraisal) onto the scan
+// doc. The breakdown a user sees always matches the appraised garment, and
+// the paid Gemini call is never repeated.
 
 import { verifyBearerToken } from '@/lib/firebase/verify-token';
 import { db, adminStorage, storageBucketName } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { evaluateResaleFromImages } from '@/lib/google/gemini';
+import { analyzeGarment } from '@/lib/google/gemini';
+import { computeFiberImpact } from '@/lib/fiber-impact';
+import { getFashionTransparencyScore } from '@/lib/wikirate';
 import type { ScanResult } from '@/types/garment';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -51,6 +55,7 @@ export async function POST(
       return Response.json({ error: 'Scan not found.' }, { status: 404 });
     }
     const scanData = scanSnap.data() as { result?: ScanResult };
+    const prevGarment = scanData.result?.garment ?? null;
 
     const [files] = await adminStorage()
       .bucket(storageBucketName())
@@ -70,27 +75,47 @@ export async function POST(
       }),
     );
 
-    const evaluation = await evaluateResaleFromImages(images, scanData.result?.garment ?? null);
+    const analysis = await analyzeGarment(images, { knownGarment: prevGarment });
 
-    // Persist what the photos taught us — the appraisal and any corrected
-    // garment identity (e.g. a brand the OCR missed).
+    // Prefer what the photos taught us; keep prior values where the photos
+    // were silent (e.g. fibers when no care label was captured).
+    const fibers = analysis.garment.fibers.length ? analysis.garment.fibers : prevGarment?.fibers ?? [];
+    const category = analysis.garment.category ?? prevGarment?.category ?? null;
+    const brand = analysis.garment.brand ?? prevGarment?.brand ?? null;
+
+    // Eco cost is recomputed from the corrected identity so the garment
+    // breakdown and the appraisal always describe the same item.
+    const { water_liters, co2_kg } = computeFiberImpact(fibers, category);
+    const cost = {
+      water_liters,
+      co2_kg,
+      ...analysis.cost,
+      ...(analysis.resale ? { resale: analysis.resale } : {}),
+    };
+
+    const fti = await getFashionTransparencyScore(brand ?? '').catch(() => null);
+
     const updates: Record<string, unknown> = {
       resaleEvaluatedAt: FieldValue.serverTimestamp(),
+      'result.cost': cost,
+      'result.landfill_impact': analysis.landfill,
     };
-    if (evaluation.resale) updates['result.cost.resale'] = evaluation.resale;
-    if (evaluation.brand) updates['result.garment.brand'] = evaluation.brand;
-    if (evaluation.category) updates['result.garment.category'] = evaluation.category;
-    if (evaluation.color) updates['result.garment.color'] = evaluation.color;
-    if (evaluation.condition) updates['result.garment.condition'] = evaluation.condition;
+    if (analysis.garment.brand) updates['result.garment.brand'] = analysis.garment.brand;
+    if (analysis.garment.category) updates['result.garment.category'] = analysis.garment.category;
+    if (analysis.garment.color) updates['result.garment.color'] = analysis.garment.color;
+    if (analysis.garment.condition) updates['result.garment.condition'] = analysis.garment.condition;
+    if (analysis.garment.origin) updates['result.garment.origin'] = analysis.garment.origin;
+    if (analysis.garment.fibers.length) updates['result.garment.fibers'] = analysis.garment.fibers;
+    if (fti) updates['result.fti'] = fti;
     await scanRef.update(updates);
 
     return Response.json({
-      resale: evaluation.resale,
+      resale: analysis.resale,
       garment: {
-        brand: evaluation.brand,
-        category: evaluation.category,
-        color: evaluation.color,
-        condition: evaluation.condition,
+        brand: analysis.garment.brand,
+        category: analysis.garment.category,
+        color: analysis.garment.color,
+        condition: analysis.garment.condition,
       },
     });
   } catch (err) {

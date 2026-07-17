@@ -101,6 +101,9 @@ export async function POST(
       result: stored.result,
       text: stored.text,
       createdAt: FieldValue.serverTimestamp(),
+      // The scan-time super call already appraised the photos, so the closet
+      // "Sell It" pin can show the payout instantly — no second Gemini call.
+      ...(stored.result.cost.resale ? { resaleEvaluatedAt: FieldValue.serverTimestamp() } : {}),
       ...(imageUrls.length > 0 ? { imageUrls } : {}),
     });
 

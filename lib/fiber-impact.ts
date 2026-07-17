@@ -68,6 +68,7 @@ const GARMENT_WEIGHT_G: Record<string, number> = {
   'underwear':   75,
   'bra':        125,
   'shoes':      450,
+  'sneaker':    450,
 };
 
 const DEFAULT_WEIGHT_G = 400;

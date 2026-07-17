@@ -8,14 +8,37 @@ const mockCheckRateLimit = mock((_ip: string) => ({ allowed: true }));
 const mockGetClientIp = mock((_req: Request) => '1.2.3.4');
 const mockVerifyBearerToken = mock(async (_req: Request): Promise<{ uid: string } | null> => ({ uid: 'user-1' }));
 
-const EVALUATION = {
-  brand: 'Miu Miu',
-  category: 'polo',
-  color: 'navy',
-  condition: 'good' as const,
+const ANALYSIS = {
+  garment: {
+    brand: 'Miu Miu',
+    category: 'polo',
+    color: 'navy',
+    condition: 'good' as const,
+    origin: 'Italy',
+    fibers: [{ material: 'cotton', percentage: 100 }],
+  },
+  cost: {
+    dye_pollution_score: 5,
+    confidence: 'high' as const,
+    reasoning: 'Reactive dye on cotton.',
+    dye_type: 'synthetic reactive dye',
+    disposal_co2_kg: 1.2,
+    disposal_landfill_years: 4,
+    disposal_note: 'Cotton decomposes but releases methane.',
+  },
+  landfill: {
+    summary: 'Mostly biodegradable.',
+    microplastics: 'None — all-natural fibers.',
+    methane: 'Methane over 1-5 years.',
+    dye_runoff: 'Reactive dye runoff possible.',
+    breakdown_years: '1-5 years',
+  },
   resale: { low_usd: 45, high_usd: 70, confidence: 'high' as const, factors: ['Miu Miu resells strongly'] },
 };
-const mockEvaluate = mock(async (_images: unknown, _garment: unknown) => ({ ...EVALUATION }));
+const mockAnalyze = mock(async (_images: unknown, _opts: unknown) => structuredClone(ANALYSIS));
+
+const FTI = { score: 42, year: 2024, brand: 'Miu Miu', url: 'https://wikirate.org/x' };
+const mockFti = mock(async (_brand: string) => FTI);
 
 let scanDocData: Record<string, unknown> | null = null;
 const updates: Array<Record<string, unknown>> = [];
@@ -57,7 +80,11 @@ mock.module('firebase-admin/firestore', () => ({
 }));
 mock.module('../../lib/google/gemini', () => ({
   ...geminiSnapshot,
-  evaluateResaleFromImages: mockEvaluate,
+  analyzeGarment: mockAnalyze,
+}));
+mock.module('../../lib/wikirate', () => ({
+  getFashionTransparencyScore: mockFti,
+  formatFtiContext: () => '',
 }));
 
 const { POST } = await import('../../app/api/user/scans/[scanId]/evaluate/route');
@@ -79,10 +106,17 @@ function req() {
 beforeEach(() => {
   mockVerifyBearerToken.mockImplementation(async () => ({ uid: 'user-1' }));
   mockCheckRateLimit.mockImplementation(() => ({ allowed: true }));
-  mockEvaluate.mockClear();
-  mockEvaluate.mockImplementation(async () => ({ ...EVALUATION }));
+  mockAnalyze.mockClear();
+  mockAnalyze.mockImplementation(async () => structuredClone(ANALYSIS));
+  mockFti.mockClear();
+  mockFti.mockImplementation(async () => FTI);
   updates.length = 0;
-  scanDocData = { result: { garment: { brand: undefined, fibers: [] }, cost: {} } };
+  scanDocData = {
+    result: {
+      garment: { brand: undefined, fibers: [{ material: 'polyester', percentage: 100 }], category: 'shirt' },
+      cost: { water_liters: 16, co2_kg: 2.1 },
+    },
+  };
   storedFiles = [
     { download: async () => [Buffer.from('img-0')] },
     { download: async () => [Buffer.from('img-1')] },
@@ -106,10 +140,10 @@ describe('POST /api/user/scans/[scanId]/evaluate', () => {
     storedFiles = [];
     const res = await POST(req(), makeParams());
     expect(res.status).toBe(409);
-    expect(mockEvaluate).not.toHaveBeenCalled();
+    expect(mockAnalyze).not.toHaveBeenCalled();
   });
 
-  it('evaluates from photos and persists appraisal + corrected garment identity', async () => {
+  it('runs the super call and persists the whole refreshed breakdown', async () => {
     const res = await POST(req(), makeParams());
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -117,19 +151,47 @@ describe('POST /api/user/scans/[scanId]/evaluate', () => {
     expect(body.garment.brand).toBe('Miu Miu');
 
     // Images passed as base64
-    const [images] = mockEvaluate.mock.calls[0] as unknown as [Array<{ data: string }>];
+    const [images] = mockAnalyze.mock.calls[0] as unknown as [Array<{ data: string }>];
     expect(images).toHaveLength(2);
     expect(images[0].data).toBe(Buffer.from('img-0').toString('base64'));
 
-    // Persisted with dot-path updates
     expect(updates).toHaveLength(1);
-    expect(updates[0]['result.cost.resale']).toEqual(EVALUATION.resale);
-    expect(updates[0]['result.garment.brand']).toBe('Miu Miu');
-    expect(updates[0].resaleEvaluatedAt).toBe('SERVER_TS');
+    const u = updates[0];
+
+    // Eco cost recomputed from the corrected fibers/category:
+    // 100% cotton, "polo" → default 400 g garment → 4000 L water, 2.4 kg CO2.
+    const cost = u['result.cost'] as Record<string, unknown>;
+    expect(cost.water_liters).toBe(4000);
+    expect(cost.co2_kg).toBe(2.4);
+    expect(cost.dye_pollution_score).toBe(5);
+    expect(cost.resale).toEqual(ANALYSIS.resale);
+
+    // Corrected identity, landfill, and FTI all persisted together.
+    expect(u['result.garment.brand']).toBe('Miu Miu');
+    expect(u['result.garment.origin']).toBe('Italy');
+    expect(u['result.garment.fibers']).toEqual(ANALYSIS.garment.fibers);
+    expect(u['result.landfill_impact']).toEqual(ANALYSIS.landfill);
+    expect(u['result.fti']).toEqual(FTI);
+    expect(u.resaleEvaluatedAt).toBe('SERVER_TS');
+  });
+
+  it('keeps prior fibers when the photos yield none', async () => {
+    mockAnalyze.mockImplementation(async () => ({
+      ...structuredClone(ANALYSIS),
+      garment: { ...structuredClone(ANALYSIS.garment), fibers: [], category: null },
+    }));
+    const res = await POST(req(), makeParams());
+    expect(res.status).toBe(200);
+
+    const u = updates[0];
+    // Prior 100% polyester shirt: 225 g → water 71 * 0.225 ≈ 16, co2 9.5 * 0.225 ≈ 2.14.
+    const cost = u['result.cost'] as Record<string, unknown>;
+    expect(cost.water_liters).toBe(16);
+    expect(u['result.garment.fibers']).toBeUndefined();
   });
 
   it('502 when Gemini fails, nothing persisted', async () => {
-    mockEvaluate.mockImplementation(async () => {
+    mockAnalyze.mockImplementation(async () => {
       throw new Error('Gemini down');
     });
     const res = await POST(req(), makeParams());

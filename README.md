@@ -9,8 +9,8 @@ Rethread is a Next.js 15 app that turns a photo of a clothing care label into a 
 ## What it does
 
 1. **Scan** — upload a photo of a care label (and optionally the garment itself).
-2. **Analyze** — Cloud Vision OCRs the label; Gemini parses fibers, origin, brand, and category. A lookup table computes water and CO₂ from verified per-fiber LCA data. If a garment photo is provided, Gemini also detects color and condition.
-3. **Assess** — Gemini scores dye pollution risk and writes an environmental summary. A second Gemini call describes what would happen if the garment went to landfill (microplastics, methane, dye runoff, breakdown years).
+2. **Analyze** — Cloud Vision OCRs the label; then one multimodal Gemini "super call" sees every photo (plus the OCR text) and returns the whole analysis at once: fibers, origin, brand, category, color, condition, dye pollution scoring, disposal impact, landfill breakdown (microplastics, methane, dye runoff, breakdown years), and an ultraconservative resale payout. A lookup table computes water and CO₂ from verified per-fiber LCA data.
+3. **Assess** — the same call's dye/disposal/landfill sections become the environmental summary; nothing is estimated twice, so the breakdown always describes one internally consistent garment.
 4. **Lookup** — WikiRate is queried for the brand's Fashion Transparency Index score (0–100), sourced from Fashion Revolution's annual index.
 5. **Route** — Google Places finds the nearest repair shop, resale store, and donation center. Routes are reordered based on garment condition (poor/fair → repair first; good/excellent → resale first).
 6. **Record** — user chooses an outcome (donate, list, repair, or discard). Authenticated users get the outcome saved to Firestore; their running CO₂ and water totals update atomically.
@@ -28,7 +28,7 @@ Rethread is a Next.js 15 app that turns a photo of a clothing care label into a 
 | Charts | Recharts (fiber donut, dye bar) |
 | 3D | Three.js (point-cloud globe loading screen) |
 | Animation | Framer Motion (`motion` v12) |
-| AI | Gemini 2.5 Flash (label parsing, garment analysis, cost reasoning, landfill impact) |
+| AI | Gemini 2.5 Flash (one multimodal super call: identification, dye/disposal reasoning, landfill impact, resale appraisal) |
 | Vision | Google Cloud Vision (care label OCR) |
 | Maps | Google Maps & Places API (route finding) |
 | Sustainability data | WikiRate REST API (Fashion Transparency Index) |
@@ -63,48 +63,30 @@ Rethread is a Next.js 15 app that turns a photo of a clothing care label into a 
 
 All API calls run server-side. The browser never holds a key. Scan results are stored in `/tmp` with an in-memory cache in front (30-min TTL) and also passed through `sessionStorage` so the result page loads instantly without a re-fetch.
 
-### Pipeline (one POST, four parallel stages)
+### Pipeline (one POST, one super call)
 
 ```
- photo(s) ──▶ [1. ingest] ──▶ [2. cost + landfill + FTI + routes run in parallel] ──▶ result
+ photo(s) ──▶ [1. OCR] ──▶ [2. Gemini super call] ──▶ [3. lookup water/CO₂ · FTI ∥ routes] ──▶ result
 ```
 
-#### 1. Ingest — what is this garment?
+#### 1. OCR
 
-- **Cloud Vision API** OCRs all care label photos in parallel.
-- **Gemini** parses the raw OCR text into structured fields: fibers, country of origin, brand, and category. Falls back to a regex parser if Gemini fails.
-- If a garment photo is also uploaded, `analyzeGarmentImage` (Gemini) detects color, category, and **condition** (`poor | fair | good | excellent`) from the image.
-- Output: a normalized `Garment` object — `{ fibers, origin, category, brand?, color?, condition? }`.
+- **Cloud Vision API** OCRs all care label photos in parallel. The raw text rides along as an auxiliary signal (and powers the regex fallback if Gemini is unavailable).
 
-#### 2. Cost — what did it really take?
+#### 2. One Gemini super call — `analyzeGarment`
 
-- **`computeFiberImpact`** (lookup table, no API) calculates water and CO₂ from per-fiber LCA data sourced from WaterFootprint.org and Textile Exchange. Accounts for garment weight by category.
-- **Gemini** receives the `Garment` and the pre-computed water/CO₂ figures, then scores dye pollution risk (1–10) and writes an environmental summary.
-- Returns structured JSON (schema-enforced):
-  ```ts
-  {
-    water_liters: number,
-    co2_kg: number,
-    dye_pollution_score: number,   // 1–10
-    confidence: 'high' | 'medium' | 'low',
-    reasoning: string,
-    dye_type?: string,
-    dye_reasoning?: string
-  }
-  ```
+- A single multimodal, schema-enforced request receives **every photo** (labels + garment) plus the OCR text and returns the entire analysis at once:
+  - **Identification** — fibers, country of origin, brand (luxury houses included), category, color, condition (`poor | fair | good | excellent`).
+  - **Dye analysis** — pollution score (1–10), likely dye family, reasoning.
+  - **Disposal** — CO₂, landfill years, one-line note.
+  - **Landfill impact** — `{ summary, microplastics, methane, dye_runoff, breakdown_years }`.
+  - **Resale payout** — ultraconservative `{ low_usd, high_usd, confidence, factors }`.
+- One call means one internally consistent garment: the identity, the eco breakdown, and the price can never disagree. It also cuts four sequential Gemini round-trips to one.
+- The same function powers the closet "Sell It" re-appraisal (`POST /api/user/scans/[scanId]/evaluate`), which re-runs it on the stored photos and persists the whole refreshed result.
 
-#### 3. Landfill impact — what if it's thrown away?
+#### 3. Water/CO₂ — lookup table, never AI
 
-- **Gemini** receives the `Garment` and returns a fiber-aware breakdown:
-  ```ts
-  {
-    summary: string,
-    microplastics: string,
-    methane: string,
-    dye_runoff: string,
-    breakdown_years: string
-  }
-  ```
+- **`computeFiberImpact`** (no API) calculates water and CO₂ from per-fiber LCA data sourced from WaterFootprint.org and Textile Exchange, using the fibers/category the super call identified. Accounts for garment weight by category.
 
 #### 4. Fashion Transparency Index
 
@@ -188,9 +170,8 @@ rethread/
 │   └── google/
 │       ├── client.ts                # Shared GCP auth (service account; 3 credential source formats)
 │       ├── vision.ts                # Cloud Vision OCR + regex-based label parser (fallback)
-│       ├── gemini.ts                # Label parsing, garment analysis, cost estimation, landfill impact
+│       ├── gemini.ts                # analyzeGarment — the one multimodal super call (identify + dye + landfill + resale)
 │       ├── places.ts                # Route finding via Google Places searchText
-│       ├── bigquery.ts              # Optional brand sustainability context (1h cache)
 │       └── docai.ts                 # Document AI stub (not implemented)
 │
 ├── types/garment.ts                 # Shared TypeScript types (Garment, ScanResult, LandfillImpact, FTI, …)
@@ -231,7 +212,7 @@ Rethread partners with local resale stores (pilot: Uptown Cheapskate). Users lis
 
 **Roles.** The login page has a "Sign up as a retailer" toggle that collects store details (name, structured address, phone). Applications land as `retailer.status: 'pending'` on the user doc and are approved by hand (flip to `'approved'` in the Firebase console). All retailer routes check `role === 'retailer' && retailer.status === 'approved'`.
 
-**Estimate.** The scan pipeline's Gemini cost call also produces an ultraconservative resale-payout range (what a thrift store *pays out*, ~20–30% of resale price, rounded down). It is stored with the scan but only revealed inside the listing flow as an "instant evaluation" — a short staged reveal that shows the reasoning factors. Retailers never see it, so it can't anchor their offers down.
+**Estimate.** The scan-time super call appraises the actual photos (brand labels included), so an ultraconservative resale-payout range (what a thrift store *pays out* — ~20–30% of resale for mass-market, 30–40% for recognized designer pieces, rounded down) is stored with every scan up front. The closet "Sell It" pin therefore shows the price **instantly** and lists in one tap (a small ✕ on the pin unlists); older scans without a stored appraisal re-run the same super call on demand via `POST /api/user/scans/[scanId]/evaluate`, which also refreshes the whole eco breakdown so details and price never disagree. Retailers never see the estimate, so it can't anchor their offers down.
 
 **Listings.** `listings/{id}` is a top-level collection with a denormalized garment snapshot, so retailers never read user subcollections. Location is rounded to ~1 km. Mirror fields (`listingId`, `listingStatus`, `listingOfferCount`) on the owner's scan doc drive the closet tile tags (For Sale → Offer → Sale Pending → Sold). Deleting a scan cancels any in-flight listing atomically; completed listings survive (ledger integrity).
 
