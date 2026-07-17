@@ -160,6 +160,13 @@ rethread/
 │   ├── user/me/route.ts             # GET — authenticated user profile + totals
 │   ├── user/scans/route.ts          # GET — authenticated user's scan history (up to 100)
 │   ├── user/scans/[scanId]/route.ts # GET / DELETE — single scan; delete reverses totals + cleans storage
+│   ├── listings/route.ts            # POST — list a closet item for sale (auth owner)
+│   ├── listings/[id]/route.ts       # GET owner detail w/ offers · PATCH cancel
+│   ├── listings/[id]/offers/…       # POST offer (retailer) · PATCH withdraw · POST accept / decline (owner)
+│   ├── listings/[id]/label/route.ts # POST — accepted retailer buys a Shippo label
+│   ├── listings/[id]/received/route.ts # POST — retailer completes the deal (kickback ledger)
+│   ├── retailer/listings/route.ts   # GET — active listings feed, nearest-first (approved retailers)
+│   ├── retailer/deals/route.ts      # GET — retailer's accepted/completed deals
 │   ├── leaderboard/route.ts         # GET — top 10 users by CO₂ saved (60s cache)
 │   └── health/route.ts              # GET — liveness probe
 │
@@ -218,6 +225,22 @@ All Firestore writes on the outcome endpoint are atomic (batched). If Firestore 
 
 ---
 
+## Resale marketplace
+
+Rethread partners with local resale stores (pilot: Uptown Cheapskate). Users list closet items; approved retailers make offers; Rethread's kickback is settled offline using completed-deal records as the ledger. No money moves through the app.
+
+**Roles.** The login page has a "Sign up as a retailer" toggle that collects store details (name, structured address, phone). Applications land as `retailer.status: 'pending'` on the user doc and are approved by hand (flip to `'approved'` in the Firebase console). All retailer routes check `role === 'retailer' && retailer.status === 'approved'`.
+
+**Estimate.** The scan pipeline's Gemini cost call also produces an ultraconservative resale-payout range (what a thrift store *pays out*, ~20–30% of resale price, rounded down). It is stored with the scan but only revealed inside the listing flow as an "instant evaluation" — a short staged reveal that shows the reasoning factors. Retailers never see it, so it can't anchor their offers down.
+
+**Listings.** `listings/{id}` is a top-level collection with a denormalized garment snapshot, so retailers never read user subcollections. Location is rounded to ~1 km. Mirror fields (`listingId`, `listingStatus`, `listingOfferCount`) on the owner's scan doc drive the closet tile tags (For Sale → Offer → Sale Pending → Sold). Deleting a scan cancels any in-flight listing atomically; completed listings survive (ledger integrity).
+
+**Offers.** Single take-it-or-leave-it offers, one open offer per retailer per listing; competition comes from multiple stores offering. Accepting one auto-declines the rest in the same batch and records `acceptedAmountUsd`.
+
+**Fulfillment.** Drop-off generates a 6-char pickup code the store matches in person. Shipping: the user provides an address at acceptance; the retailer buys a prepaid label through the platform Shippo account (cheapest rate, parcel defaults by garment category); the user downloads the label PDF from their closet. The retailer marks the item received, which sets `finalAmountUsd` + `completedAt` — the kickback ledger row.
+
+---
+
 ## Environment variables
 
 ```bash
@@ -245,6 +268,9 @@ NEXT_PUBLIC_GOOGLE_MAPS_KEY=
 
 # WikiRate Fashion Transparency Index (optional — free key at wikirate.org)
 WIKIRATE_API_KEY=
+
+# Shippo — prepaid shipping labels for marketplace deals (test-mode token in dev)
+SHIPPO_API_KEY=
 
 # Document AI — optional, stub not implemented
 DOCAI_PROCESSOR_ID=
