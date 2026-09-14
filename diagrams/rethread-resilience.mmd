@@ -1,0 +1,21 @@
+graph TD
+  CALL(["external call<br/>Gemini / Vision / Places / BigQuery / WikiRate"]):::ext
+  CALL --> OK{"success?"}:::decision
+  OK -->|yes| RET(["return data"]):::success
+  OK -->|no| RETRYABLE{"retryable?<br/>network err or 429/5xx"}:::decision
+  RETRYABLE -->|"no (4xx)"| THROW(["throw after attempts"]):::reject
+  RETRYABLE -->|yes| LEFT{"attempts left?"}:::decision
+  LEFT -->|no| THROW
+  LEFT -->|yes| BACKOFF(["backoff<br/>base * 2^n, cap 5s, +-20% jitter"]):::warn
+  BACKOFF --> CALL
+  THROW --> CATCH(["stage .catch<br/>in /api/scan"]):::fallback
+  CATCH --> FALLBACK(["fallback value<br/>empty / null / regex / fallback cost / fallback routes / omit"]):::fallback
+  FALLBACK --> PARTIAL(["scan returns 200<br/>partial result + confidence flag"]):::success
+  RET --> PARTIAL
+  classDef ext fill:#FEF3C7,stroke:#B45309,color:#78350F;
+  classDef server fill:#DCFCE7,stroke:#15803D,color:#14532D;
+  classDef decision fill:#FEF9C3,stroke:#CA8A04,color:#713F12;
+  classDef reject fill:#FEE2E2,stroke:#B91C1C,color:#7F1D1D;
+  classDef fallback fill:#FFE4E6,stroke:#BE123C,color:#881337;
+  classDef warn fill:#FDE68A,stroke:#B45309,color:#78350F;
+  classDef success fill:#DCFCE7,stroke:#15803D,color:#14532D;

@@ -1,0 +1,24 @@
+graph TD
+  LOGIN(["/login<br/>Sign in with Google"]):::client
+  LOGIN -->|"signInWithPopup"| GOOGLE(["Google OAuth<br/>identity provider"]):::ext
+  GOOGLE --> ASC(["onAuthStateChanged<br/>AuthProvider"]):::client
+  ASC --> TOKEN(["fbUser.getIdToken()"]):::client
+  TOKEN -->|"POST /api/auth/callback (Bearer)"| VERIFY(["verifyBearerToken<br/>adminAuth.verifyIdToken"]):::server
+  VERIFY --> VOK{"token valid?"}:::decision
+  VOK -->|no| R401(["401 invalid / expired"]):::reject
+  VOK -->|yes| EXISTS{"user doc exists?"}:::decision
+  EXISTS -->|"no - first sign-in"| CREATE(["Firestore users/uid create<br/>totals 0 + joinedAt"]):::store
+  EXISTS -->|yes| MERGE(["Firestore merge email<br/>keep joinedAt"]):::store
+  CREATE --> RESP(["return profile + totals"]):::server
+  MERGE --> RESP
+  RESP --> SETUSER(["setUser + stats in context<br/>header + profile via useAuth"]):::client
+  TOKEN -.->|"network fail"| FB(["setUser from Firebase only<br/>no stats"]):::fallback
+  SETUSER --> PROFILE(["/profile<br/>GET /api/user/me (Bearer)"]):::client
+  PROFILE --> MEREAD(["verify -> Firestore read<br/>404 no doc / 503 error"]):::server
+  classDef client fill:#DBEAFE,stroke:#1E40AF,color:#1E3A8A;
+  classDef server fill:#DCFCE7,stroke:#15803D,color:#14532D;
+  classDef ext fill:#FEF3C7,stroke:#B45309,color:#78350F;
+  classDef store fill:#EDE9FE,stroke:#6D28D9,color:#4C1D95;
+  classDef decision fill:#FEF9C3,stroke:#CA8A04,color:#713F12;
+  classDef reject fill:#FEE2E2,stroke:#B91C1C,color:#7F1D1D;
+  classDef fallback fill:#FFE4E6,stroke:#BE123C,color:#881337;
