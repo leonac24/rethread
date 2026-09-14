@@ -1,0 +1,27 @@
+graph TD
+  IN["POST /api/scan<br/>traceId + reqLog"]:::server
+  IN --> RL{"rate limit ok?"}:::decision
+  RL -->|no| R429["429 Too Many Requests<br/>Retry-After"]:::reject
+  RL -->|yes| V["validate uploads<br/>count, 10MB, MIME, magic bytes"]:::server
+  V --> VD{"all valid?"}:::decision
+  VD -->|no| R400["400 Bad Request"]:::reject
+  VD -->|yes| OCR["Vision OCR per tag<br/>fail -> empty text"]:::ext
+  VD -->|yes| IMG["Gemini garment image<br/>fail -> null"]:::ext
+  OCR --> PARSE["Gemini label parse<br/>fail -> regex parser"]:::ext
+  PARSE --> GAR["assemble garment<br/>fibers, origin, category, brand, color, condition"]:::server
+  IMG --> GAR
+  GAR --> COST["Gemini computeCost<br/>+ BigQuery brand - fail -> fallback cost"]:::ext
+  GAR --> ROUTE["Places findRoutes<br/>no coords / fail -> fallback routes"]:::ext
+  GAR --> LAND["Gemini landfill impact<br/>fail -> omit"]:::ext
+  GAR --> FTI["WikiRate FTI<br/>fail -> omit"]:::ext
+  COST --> ASM["build ScanResult<br/>prioritizeRoutesByCondition"]:::server
+  ROUTE --> ASM
+  LAND --> ASM
+  FTI --> ASM
+  ASM --> SAVE["saveScanResult(text, result)"]:::store
+  SAVE --> OUT["200 {id, text, result}<br/>X-Trace-Id"]:::server
+  classDef server fill:#DCFCE7,stroke:#15803D,color:#14532D;
+  classDef ext fill:#FEF3C7,stroke:#B45309,color:#78350F;
+  classDef store fill:#EDE9FE,stroke:#6D28D9,color:#4C1D95;
+  classDef decision fill:#FEF9C3,stroke:#CA8A04,color:#713F12;
+  classDef reject fill:#FEE2E2,stroke:#B91C1C,color:#7F1D1D;

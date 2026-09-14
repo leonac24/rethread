@@ -1,0 +1,24 @@
+graph TD
+  S1["/scan - CameraScan<br/>upload garment + tag photos"]:::client
+  S1 --> G1{"garment photo<br/>+ at least 1 tag?"}:::decision
+  G1 -->|no| E1["inline error<br/>'upload at least one...'"]:::reject
+  G1 -->|yes| S2["handleScan<br/>router.push('/scanning')"]:::client
+  S2 --> S3["compressImage each<br/>800px q0.5 -> dataURL"]:::client
+  S3 --> S4["sessionStorage<br/>scan:pending = files + hasGarmentPhoto"]:::store
+  S4 --> SV1["/scanning - ScanningView<br/>3D globe + status blurbs"]:::client
+  SV1 --> SV2["waitForPending (poll 3s)<br/>+ getCurrentCoords (geo 8s)"]:::client
+  SV2 --> P{"pending found?"}:::decision
+  P -->|no| R0["router.replace('/scan')"]:::reject
+  P -->|yes| SV3["build FormData<br/>garment_photo + photo[] + lat/lng"]:::client
+  SV3 --> SV4["POST /api/scan"]:::server
+  SV4 --> OK{"response ok?"}:::decision
+  OK -->|no| ERR["sessionStorage scan:error<br/>router.replace('/scan')"]:::fallback
+  ERR -.->|"shown on next /scan mount"| S1
+  OK -->|yes| SV5["sessionStorage scan:ID<br/>text + result + previews"]:::store
+  SV5 --> SV6["router.replace('/result/:id')"]:::client
+  classDef client fill:#DBEAFE,stroke:#1E40AF,color:#1E3A8A;
+  classDef server fill:#DCFCE7,stroke:#15803D,color:#14532D;
+  classDef store fill:#EDE9FE,stroke:#6D28D9,color:#4C1D95;
+  classDef decision fill:#FEF9C3,stroke:#CA8A04,color:#713F12;
+  classDef reject fill:#FEE2E2,stroke:#B91C1C,color:#7F1D1D;
+  classDef fallback fill:#FFE4E6,stroke:#BE123C,color:#881337;

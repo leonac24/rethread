@@ -1,0 +1,30 @@
+graph TD
+  A["/scan<br/>upload garment + tag photos"] -->|"compress, get GPS coords"| B["/scanning<br/>client orchestrator"]
+  B -->|"POST multipart /api/scan"| C["API: rate-limit<br/>+ validate magic bytes"]
+  C --> D["Ingest<br/>Vision OCR + Gemini label parse"]
+  D --> E["Enrich in parallel<br/>Promise.all"]
+  E --> F1["Gemini cost<br/>+ BigQuery brand"]
+  E --> F2["Places<br/>reroute options"]
+  E --> F3["Gemini<br/>landfill impact"]
+  E --> F4["WikiRate<br/>FTI score"]
+  F1 --> G["saveScanResult<br/>returns scan id"]
+  F2 --> G
+  F3 --> G
+  F4 --> G
+  G -->|"cache result, redirect"| H["/result/:id<br/>fibers - impact - FTI - routes"]
+  H --> I["Pick outcome<br/>Repair / List / Donate / Throw Away"]
+  I -->|"POST /api/scan/:id/outcome"| J["recordOutcome<br/>404 missing - 409 duplicate"]
+  J --> K{"Signed in &<br/>not thrown away?"}
+  K -->|yes| L["Firestore batch<br/>credit CO2 + water saved"]
+  K -->|no| M["Outcome banner<br/>saved impact / honest log"]
+  L --> M
+  classDef client fill:#DBEAFE,stroke:#1E40AF,color:#1E3A8A;
+  classDef server fill:#DCFCE7,stroke:#15803D,color:#14532D;
+  classDef ext fill:#FEF3C7,stroke:#B45309,color:#78350F;
+  classDef store fill:#EDE9FE,stroke:#6D28D9,color:#4C1D95;
+  classDef decision fill:#FEF9C3,stroke:#CA8A04,color:#713F12;
+  class A,B,H,I,M client;
+  class C,E server;
+  class D,F1,F2,F3,F4 ext;
+  class G,J,L store;
+  class K decision;
