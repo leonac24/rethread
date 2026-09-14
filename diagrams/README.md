@@ -13,6 +13,8 @@ Each diagram is a **triplet** (plus source):
 
 ## The set
 
+### Product flows
+
 | Diagram | What it shows |
 |---|---|
 | [`rethread-scan-outcome-flow`](./rethread-scan-outcome-flow.png) | **Overview** — end to end, `/scan` → pipeline → `/result` → outcome recording. Start here. |
@@ -20,6 +22,14 @@ Each diagram is a **triplet** (plus source):
 | [`rethread-scan-pipeline`](./rethread-scan-pipeline.png) | `POST /api/scan` server pipeline: rate-limit → validation → ingest (OCR + Gemini, regex fallback) → 4-way parallel enrich (each with its degradation) → save. |
 | [`rethread-outcome-recording`](./rethread-outcome-recording.png) | `POST /api/scan/:id/outcome`: id + rate-limit + action validation → `recordOutcome` (404/409) → auth check → Firestore credit (graceful commit failure). |
 | [`rethread-outcome-state-machine`](./rethread-outcome-state-machine.png) | `OutcomeSection` client UI states: idle → confirming (throw away) → loading → done / conflict / error, with the retry loop. |
+
+### Backend / engineering
+
+| Diagram | What it shows |
+|---|---|
+| [`rethread-auth-flow`](./rethread-auth-flow.png) | Firebase Google Sign-In: `/login` → OAuth → `onAuthStateChanged` → `/api/auth/callback` (verify token, upsert user doc) → context stats, plus `/api/user/me` read. |
+| [`rethread-scan-store`](./rethread-scan-store.png) | Two-tier scan cache: in-memory `Map` + disk `/tmp/.scan-cache` with TTL prune, and the read fallback ladder sessionStorage → Map → disk → 404. |
+| [`rethread-resilience`](./rethread-resilience.png) | `withRetry` exponential backoff (retryable = network / 429 / 5xx) plus the graceful-degradation ladder — every stage falls back so a scan still returns 200. |
 
 ## Color legend
 
