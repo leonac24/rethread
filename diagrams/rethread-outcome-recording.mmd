@@ -1,0 +1,24 @@
+graph TD
+  C0["OutcomeSection (client)<br/>throw_away confirms first"]:::client
+  C0 --> IN["POST /api/scan/:id/outcome"]:::server
+  IN --> IDV{"valid UUID?"}:::decision
+  IDV -->|no| R400["400 invalid id"]:::reject
+  IDV -->|yes| RL{"rate limit ok?"}:::decision
+  RL -->|no| R429["429 Too Many Requests"]:::reject
+  RL -->|yes| BODY{"JSON body +<br/>valid action?"}:::decision
+  BODY -->|no| R400b["400 bad action"]:::reject
+  BODY -->|yes| REC["recordOutcome(id, action)<br/>repair / list / donate / throw_away"]:::store
+  REC --> ST{"scan stored?"}:::decision
+  ST -->|no| R404["404 not found"]:::reject
+  ST -->|yes| CFL{"already recorded?"}:::decision
+  CFL -->|yes| R409["409 conflict"]:::reject
+  CFL -->|no| AUTH["verifyBearerToken"]:::server
+  AUTH --> CR{"signed in &<br/>not throw_away?"}:::decision
+  CR -->|no| RESP["200 {id, outcome}"]:::server
+  CR -->|yes| BATCH["Firestore batch<br/>outcome doc + increment<br/>CO2, water, actionCount"]:::store
+  BATCH -.->|"commit fail -> log, still 200"| RESP
+  classDef client fill:#DBEAFE,stroke:#1E40AF,color:#1E3A8A;
+  classDef server fill:#DCFCE7,stroke:#15803D,color:#14532D;
+  classDef store fill:#EDE9FE,stroke:#6D28D9,color:#4C1D95;
+  classDef decision fill:#FEF9C3,stroke:#CA8A04,color:#713F12;
+  classDef reject fill:#FEE2E2,stroke:#B91C1C,color:#7F1D1D;

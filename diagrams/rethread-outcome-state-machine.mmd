@@ -1,0 +1,21 @@
+graph TD
+  S0(["start"]):::neutral
+  S0 --> IDLE(["idle<br/>4 action cards"]):::state
+  IDLE -->|"tap Repair / List / Donate"| LOAD(["loading<br/>POST /outcome"]):::state
+  IDLE -->|"tap Throw Away"| CONF(["confirming<br/>landfill CO2 + years warning"]):::warn
+  CONF -->|"Go back"| IDLE
+  CONF -->|"Yes, log it"| LOAD
+  LOAD --> RESP{"response?"}:::warn
+  RESP -->|"200 - action != throw_away"| DSAVE(["done<br/>saved banner<br/>credited CO2 + water"]):::success
+  RESP -->|"200 - throw_away"| DHON(["done<br/>honest-log banner"]):::neutral
+  RESP -->|"409"| CONFL(["conflict<br/>already recorded"]):::reject
+  RESP -->|"429 / not ok / network"| ERR(["error<br/>message + Try again"]):::reject
+  ERR -->|"Try again"| IDLE
+  DSAVE --> E0(["end"]):::neutral
+  DHON --> E0
+  CONFL --> E0
+  classDef state fill:#DBEAFE,stroke:#1E40AF,color:#1E3A8A;
+  classDef warn fill:#FEF9C3,stroke:#CA8A04,color:#713F12;
+  classDef success fill:#DCFCE7,stroke:#15803D,color:#14532D;
+  classDef reject fill:#FEE2E2,stroke:#B91C1C,color:#7F1D1D;
+  classDef neutral fill:#F3F4F6,stroke:#6B7280,color:#374151;
