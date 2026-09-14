@@ -1,0 +1,21 @@
+graph TD
+  SAVE(["saveScanResult"]):::server --> PRUNE(["pruneExpired<br/>TTL sweep Map + unlink files"]):::server
+  PRUNE --> WRITE(["write both tiers<br/>Map + /tmp/.scan-cache/id.json (0700)<br/>memory-only if > MAX_SCAN_BYTES"]):::store
+  WRITE --> CSS(["client sessionStorage<br/>scan:id = text + result + previews"]):::store
+  CSS --> LOAD(["ResultView load"]):::client
+  LOAD --> HITSS{"sessionStorage hit?"}:::decision
+  HITSS -->|yes| RENDER(["render result"]):::client
+  HITSS -->|no| GET(["GET /api/scan/:id"]):::server
+  GET --> GID(["getScanById<br/>UUID guard (path traversal)"]):::server
+  GID --> HITMEM{"in Map + fresh?"}:::decision
+  HITMEM -->|yes| RENDER
+  HITMEM -->|no| DISK(["read /tmp file<br/>validate shape + TTL"]):::store
+  DISK --> DOK{"valid + fresh?"}:::decision
+  DOK -->|yes| REPOP(["repopulate Map -> return"]):::store
+  REPOP --> RENDER
+  DOK -->|no| MISS(["404 not found<br/>ENOENT / corrupt / expired"]):::reject
+  classDef client fill:#DBEAFE,stroke:#1E40AF,color:#1E3A8A;
+  classDef server fill:#DCFCE7,stroke:#15803D,color:#14532D;
+  classDef store fill:#EDE9FE,stroke:#6D28D9,color:#4C1D95;
+  classDef decision fill:#FEF9C3,stroke:#CA8A04,color:#713F12;
+  classDef reject fill:#FEE2E2,stroke:#B91C1C,color:#7F1D1D;
