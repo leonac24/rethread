@@ -3,6 +3,7 @@
 // Requires WIKIRATE_API_KEY env var (free registration at wikirate.org).
 
 import { log } from '@/lib/logger';
+import { redis } from '@/lib/redis';
 
 export type WikiRateResult = {
   score: number;        // 0–100
@@ -120,9 +121,20 @@ function resolveCompanyName(brand: string): string {
   return BRAND_ALIASES[lower] ?? brand.trim();
 }
 
-// In-memory cache — avoid redundant API calls within a process lifetime
-const cache = new Map<string, { result: WikiRateResult | null; cachedAt: number }>();
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+// Shared Redis cache — avoids redundant API calls across instances. Wrapped so a cached
+// "no score" (null) is distinguishable from a cache miss.
+const CACHE_TTL_S = 24 * 60 * 60; // 24 hours
+const cacheKey = (company: string) => `wikirate:${company.toLowerCase()}`;
+
+async function cacheGet(company: string) {
+  return redis().get<{ result: WikiRateResult | null }>(cacheKey(company)).catch(() => null);
+}
+
+async function cacheSet(company: string, result: WikiRateResult | null) {
+  await redis().set(cacheKey(company), { result }, { ex: CACHE_TTL_S }).catch((err) => {
+    log.warn('WikiRate cache write failed', { stage: 'cost', err: String(err) });
+  });
+}
 
 export async function getFashionTransparencyScore(
   brand: string,
@@ -136,12 +148,8 @@ export async function getFashionTransparencyScore(
   }
 
   const companyName = resolveCompanyName(brand);
-  const cacheKey = companyName.toLowerCase();
-
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
-    return cached.result;
-  }
+  const cached = await cacheGet(companyName);
+  if (cached) return cached.result;
 
   // Try the current year first, fall back one year
   const currentYear = new Date().getFullYear();
@@ -196,7 +204,7 @@ export async function getFashionTransparencyScore(
         url: html_url,
       };
 
-      cache.set(cacheKey, { result, cachedAt: Date.now() });
+      await cacheSet(companyName, result);
       log.info('WikiRate FTI score fetched', { stage: 'cost', brand: companyName, score, year, url: result.url });
       return result;
     } catch (err) {
@@ -205,18 +213,6 @@ export async function getFashionTransparencyScore(
   }
 
   // Cache negative result so we don't hammer the API for unknown brands
-  cache.set(cacheKey, { result: null, cachedAt: Date.now() });
+  await cacheSet(companyName, null);
   return null;
-}
-
-// Format the FTI result as a human-readable context string for Gemini
-export function formatFtiContext(fti: WikiRateResult): string {
-  const tier =
-    fti.score >= 61 ? 'high transparency'
-    : fti.score >= 41 ? 'moderate transparency'
-    : fti.score >= 21 ? 'low transparency'
-    : 'very low transparency';
-
-  return `Fashion Transparency Index ${fti.year}: ${fti.brand} scored ${fti.score}/100 (${tier}). ` +
-    `This score reflects public disclosure of supply chain, environmental policies, and labor practices.`;
 }

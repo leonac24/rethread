@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
   const ip = getClientIp(request);
 
-  const { allowed, retryAfter } = checkRateLimit(ip);
+  const { allowed, retryAfter } = await checkRateLimit(ip);
   if (!allowed) {
     return Response.json(
       { error: 'Too many requests. Please wait a moment before scanning again.' },

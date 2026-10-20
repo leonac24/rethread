@@ -2,8 +2,6 @@
 // All server-side Google API clients initialize from here.
 
 import { readFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { GoogleAuth } from 'google-auth-library';
 
 type GoogleCredentials = {
   projectId?: string;
@@ -68,50 +66,4 @@ export function getGoogleCredentials() {
   throw new Error(
     'Missing Google credentials. Set GOOGLE_APPLICATION_CREDENTIALS_JSON or GOOGLE_APPLICATION_CREDENTIALS_BASE64.',
   );
-}
-
-export async function getGoogleCredentialsFromFile(
-  filePath: string,
-): Promise<GoogleCredentials> {
-  const contents = await readFile(filePath, 'utf8');
-  return parseCredentials(contents);
-}
-
-// Token cache + in-flight deduplication.
-// _tokenFetch ensures only one token request is in flight at a time — concurrent
-// callers await the same promise instead of each creating a new GoogleAuth instance.
-let _tokenFetch: Promise<string> | null = null;
-let tokenCache: { token: string; expiresAt: number } | null = null;
-
-export async function getGoogleAccessToken(scopes: string | string[]): Promise<string> {
-  const now = Date.now();
-
-  // Return cached token if it has more than 60 seconds of life left
-  if (tokenCache && now < tokenCache.expiresAt - 60_000) {
-    return tokenCache.token;
-  }
-
-  // Deduplicate concurrent token fetches — only one in-flight at a time
-  if (!_tokenFetch) {
-    _tokenFetch = (async () => {
-      const credentials = getGoogleCredentials();
-      const auth = new GoogleAuth({
-        credentials: {
-          type: 'service_account',
-          project_id: credentials.projectId,
-          client_email: credentials.clientEmail,
-          private_key: credentials.privateKey,
-        },
-        scopes,
-      });
-      const token = await auth.getAccessToken();
-      if (!token) throw new Error('Failed to obtain Google access token.');
-      tokenCache = { token, expiresAt: Date.now() + 50 * 60 * 1000 };
-      return token;
-    })().finally(() => {
-      _tokenFetch = null;
-    });
-  }
-
-  return _tokenFetch;
 }
