@@ -6,8 +6,9 @@ export function createFakeRedis() {
     if (e?.expiresAt !== undefined && Date.now() >= e.expiresAt) store.delete(key);
     return store.get(key);
   };
-  // structuredClone mimics JSON round-tripping through Redis
-  const get = async (key: string) => structuredClone(live(key)?.value ?? null);
+  // Upstash JSON-serializes values, so Dates and Maps don't survive the trip
+  const roundTrip = (v: unknown) => JSON.parse(JSON.stringify(v ?? null));
+  const get = async (key: string) => roundTrip(live(key)?.value);
   return {
     store,
     get,
@@ -15,7 +16,7 @@ export function createFakeRedis() {
     set: async (key: string, value: unknown, opts: { px?: number; ex?: number; nx?: boolean } = {}) => {
       if (opts.nx && live(key)) return null;
       const ttl = opts.px ?? (opts.ex !== undefined ? opts.ex * 1000 : undefined);
-      store.set(key, { value: structuredClone(value), expiresAt: ttl === undefined ? undefined : Date.now() + ttl });
+      store.set(key, { value: roundTrip(value), expiresAt: ttl === undefined ? undefined : Date.now() + ttl });
       return 'OK';
     },
     // Only the rate-limit script is supported: INCR + PEXPIRE on first hit, returns [count, pttl]

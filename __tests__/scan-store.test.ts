@@ -14,7 +14,6 @@ mock.module('../lib/config', () => ({
   MAX_FILE_BYTES: 10 * 1024 * 1024,
   BRAND_CACHE_TTL_MS: 60 * 60 * 1000,
   GEMINI_TIMEOUT_MS: 20_000,
-  BIGQUERY_TIMEOUT_MS: 10_000,
   SHIPPO_TIMEOUT_MS: 20_000,
 }));
 
