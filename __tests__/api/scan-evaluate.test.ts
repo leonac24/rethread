@@ -85,7 +85,6 @@ mock.module('../../lib/google/gemini', () => ({
 }));
 mock.module('../../lib/wikirate', () => ({
   getFashionTransparencyScore: mockFti,
-  formatFtiContext: () => '',
 }));
 
 const { POST } = await import('../../app/api/user/scans/[scanId]/evaluate/route');

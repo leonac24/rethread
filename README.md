@@ -132,7 +132,6 @@ rethread/
 │   ├── header-nav.tsx               # Auth-aware nav (sign-in icon or avatar + sign-out)
 │   ├── footer.tsx                   # Footer (hidden on /scan and /scanning)
 │   ├── scroll-to-button.tsx         # Smooth-scroll CTA for landing page
-│   └── scan-form.tsx                # Legacy single-file upload form (kept for compatibility)
 │
 ├── app/api/
 │   ├── scan/route.ts                # POST — full pipeline; rate-limited (5 req/min/IP); magic-byte validation
@@ -172,7 +171,6 @@ rethread/
 │       ├── vision.ts                # Cloud Vision OCR + regex-based label parser (fallback)
 │       ├── gemini.ts                # analyzeGarment — the one multimodal super call (identify + dye + landfill + resale)
 │       ├── places.ts                # Route finding via Google Places searchText
-│       └── docai.ts                 # Document AI stub (not implemented)
 │
 ├── types/garment.ts                 # Shared TypeScript types (Garment, ScanResult, LandfillImpact, FTI, …)
 ├── __tests__/                       # Bun test suite (rate-limit, retry, route-utils, scan-store, API routes)
@@ -250,15 +248,14 @@ NEXT_PUBLIC_GOOGLE_MAPS_KEY=
 # WikiRate Fashion Transparency Index (optional — free key at wikirate.org)
 WIKIRATE_API_KEY=
 
+# Upstash Redis (required) — rate limiting, scan cache, WikiRate cache
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+
 # Shippo — prepaid shipping labels for marketplace deals (test-mode token in dev)
 SHIPPO_API_KEY=
 
-# Document AI — optional, stub not implemented
-DOCAI_PROCESSOR_ID=
 
-# BigQuery — optional, for brand sustainability grounding
-BIGQUERY_DATASET=
-BIGQUERY_BRAND_COLUMN=brand
 ```
 
 Copy `.env.example` and fill in values. Set the same variables in your Vercel project under **Settings → Environment Variables**.

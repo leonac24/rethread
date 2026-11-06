@@ -1,53 +1,59 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { createFakeRedis } from '../helpers/fake-redis';
 
-// Re-import fresh module state for each test by clearing the module cache.
-// rate-limit.ts holds module-level state (ipHits Map) so we must reset between tests.
-let checkRateLimit: (ip: string) => { allowed: boolean; retryAfter?: number };
-let getClientIp: (req: Request) => string;
+let fake = createFakeRedis();
+mock.module('../../lib/redis', () => ({ redis: () => fake }));
+mock.module('../../lib/logger', () => ({ log: { info() {}, warn() {}, error() {} } }));
 
-beforeEach(async () => {
-  // Force a fresh module import to reset ipHits Map state
-  const mod = await import(`../../lib/rate-limit?t=${Date.now()}`);
-  checkRateLimit = mod.checkRateLimit;
-  getClientIp = mod.getClientIp;
+const { checkRateLimit, getClientIp } = await import('../../lib/rate-limit?real'); // query bypasses other files' mock.module of rate-limit
+
+beforeEach(() => {
+  fake = createFakeRedis();
 });
 
 describe('checkRateLimit', () => {
-  it('allows first request from a new IP', () => {
-    const result = checkRateLimit('1.2.3.4');
+  it('allows first request from a new IP', async () => {
+    const result = await checkRateLimit('1.2.3.4');
     expect(result.allowed).toBe(true);
   });
 
-  it('allows requests up to the limit', () => {
+  it('allows requests up to the limit', async () => {
     const ip = '10.0.0.1';
     // RATE_LIMIT is 5 — first 5 should all be allowed
     for (let i = 0; i < 5; i++) {
-      expect(checkRateLimit(ip).allowed).toBe(true);
+      expect((await checkRateLimit(ip)).allowed).toBe(true);
     }
   });
 
-  it('blocks the 6th request within the window', () => {
+  it('blocks the 6th request within the window', async () => {
     const ip = '10.0.0.2';
-    for (let i = 0; i < 5; i++) checkRateLimit(ip);
-    const result = checkRateLimit(ip);
+    for (let i = 0; i < 5; i++) await checkRateLimit(ip);
+    const result = await checkRateLimit(ip);
     expect(result.allowed).toBe(false);
   });
 
-  it('returns a positive retryAfter when blocked', () => {
+  it('returns a positive retryAfter when blocked', async () => {
     const ip = '10.0.0.3';
-    for (let i = 0; i < 5; i++) checkRateLimit(ip);
-    const result = checkRateLimit(ip);
+    for (let i = 0; i < 5; i++) await checkRateLimit(ip);
+    const result = await checkRateLimit(ip);
     expect(result.retryAfter).toBeGreaterThan(0);
     expect(result.retryAfter).toBeLessThanOrEqual(60);
   });
 
-  it('treats different IPs independently', () => {
+  it('treats different IPs independently', async () => {
     const ipA = '192.168.1.1';
     const ipB = '192.168.1.2';
-    for (let i = 0; i < 5; i++) checkRateLimit(ipA);
+    for (let i = 0; i < 5; i++) await checkRateLimit(ipA);
     // ipA is blocked but ipB should still be allowed
-    expect(checkRateLimit(ipA).allowed).toBe(false);
-    expect(checkRateLimit(ipB).allowed).toBe(true);
+    expect((await checkRateLimit(ipA)).allowed).toBe(false);
+    expect((await checkRateLimit(ipB)).allowed).toBe(true);
+  });
+});
+
+describe('checkRateLimit when Redis is down', () => {
+  it('fails open', async () => {
+    fake.eval = async () => { throw new Error('ECONNREFUSED'); };
+    expect((await checkRateLimit('10.0.0.9')).allowed).toBe(true);
   });
 });
 

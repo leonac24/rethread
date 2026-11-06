@@ -15,7 +15,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  const { allowed, retryAfter } = checkRateLimit(ip);
+  const { allowed, retryAfter } = await checkRateLimit(ip);
   if (!allowed) {
     return Response.json(
       { error: 'Too many requests. Please wait a moment.' },

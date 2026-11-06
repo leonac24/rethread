@@ -1,8 +1,6 @@
 import type { OutcomeAction, ScanResult } from '@/types/garment';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { log } from '@/lib/logger';
+import { redis } from '@/lib/redis';
 import { SCAN_TTL_MS, MAX_SCAN_BYTES } from '@/lib/config';
 
 type StoredScan = {
@@ -14,127 +12,38 @@ type StoredScan = {
   outcomeAt?: number;
 };
 
-const scans = new Map<string, StoredScan>();
-// Use os.tmpdir() for cross-platform correctness (Linux /tmp, Windows %TEMP%)
-const STORE_DIR = join(tmpdir(), '.scan-cache');
+type StoredOutcome = { outcome: OutcomeAction; outcomeAt: number };
 
-// Validated UUID v4 format — prevents path traversal via scan ID
+// Validated UUID v4 format — keeps arbitrary input out of Redis key names
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-let storeDirReady = false;
-async function ensureStoreDir() {
-  if (!storeDirReady) {
-    // mode 0o700: owner-only access — scan files contain garment analysis data
-    await mkdir(STORE_DIR, { recursive: true, mode: 0o700 });
-    storeDirReady = true;
-  }
-}
-
-function scanFilePath(id: string) {
-  return join(STORE_DIR, `${id}.json`);
-}
-
-// Collect expired IDs synchronously (Map mutation is single-threaded safe),
-// then fire-and-forget file deletions. No boolean flag needed — the Map
-// mutation itself is the critical section and Node's event loop serialises it.
-function pruneExpired(now: number): void {
-  const expired: string[] = [];
-  for (const [id, scan] of scans) {
-    if (now - scan.createdAt > SCAN_TTL_MS) {
-      scans.delete(id);
-      expired.push(id);
-    }
-  }
-  for (const id of expired) {
-    unlink(scanFilePath(id)).catch((err: NodeJS.ErrnoException) => {
-      if (err?.code !== 'ENOENT') {
-        log.warn('Failed to delete expired scan file', { id, err: err.message });
-      }
-    });
-  }
-}
+const scanKey = (id: string) => `scan:${id}`;
+// Separate key so SET NX makes "first outcome wins" atomic across instances
+const outcomeKey = (id: string) => `scan:${id}:outcome`;
 
 export async function saveScanResult(text: string, result: ScanResult): Promise<string> {
-  const now = Date.now();
-  await ensureStoreDir();
-  pruneExpired(now);
-
   const id = result.id;
-  const stored: StoredScan = { id, text, result, createdAt: now };
-  // Compact JSON — no pretty-printing; saves ~30% storage with no read-side impact
-  const serialized = JSON.stringify(stored);
+  const stored: StoredScan = { id, text, result, createdAt: Date.now() };
+  const bytes = JSON.stringify(stored).length;
 
-  if (serialized.length > MAX_SCAN_BYTES) {
-    log.warn('Scan result exceeds size limit, skipping disk write', {
-      id,
-      bytes: serialized.length,
-      limit: MAX_SCAN_BYTES,
-    });
-    scans.set(id, stored);
+  if (bytes > MAX_SCAN_BYTES) {
+    // The caller still returns the result inline; only a later GET /api/scan/:id will 404.
+    log.warn('Scan result exceeds size limit, not storing', { id, bytes, limit: MAX_SCAN_BYTES });
     return id;
   }
 
-  scans.set(id, stored);
-  await writeFile(scanFilePath(id), serialized, 'utf8');
+  await redis().set(scanKey(id), stored, { px: SCAN_TTL_MS });
   return id;
 }
 
 export async function getScanById(id: string): Promise<StoredScan | null> {
-  if (!UUID_RE.test(id)) {
-    throw new Error('Invalid scan ID format');
-  }
+  if (!UUID_RE.test(id)) throw new Error('Invalid scan ID format');
 
-  const now = Date.now();
-  pruneExpired(now);
-
-  const inMemory = scans.get(id);
-  if (inMemory) {
-    if (now - inMemory.createdAt > SCAN_TTL_MS) {
-      scans.delete(id);
-      return null;
-    }
-    return inMemory;
-  }
-
-  const filePath = scanFilePath(id);
-  try {
-    const raw = await readFile(filePath, 'utf8');
-    const parsed = JSON.parse(raw);
-
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      typeof parsed.id !== 'string' ||
-      typeof parsed.createdAt !== 'number' ||
-      !parsed.result
-    ) {
-      log.warn('Corrupt or malformed scan file on disk, discarding', { id });
-      unlink(filePath).catch(() => {});
-      return null;
-    }
-
-    const typedParsed = parsed as StoredScan;
-
-    if (now - typedParsed.createdAt > SCAN_TTL_MS) {
-      // Best-effort delete — log unexpected failures
-      unlink(filePath).catch((err: NodeJS.ErrnoException) => {
-        if (err?.code !== 'ENOENT') {
-          log.warn('Failed to delete expired scan file on read path', { id, err: err.message });
-        }
-      });
-      return null;
-    }
-
-    scans.set(id, typedParsed);
-    return typedParsed;
-  } catch (err) {
-    // ENOENT is expected (cache miss) — everything else is a real problem
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code !== 'ENOENT') {
-      log.warn('Unexpected error reading scan file', { id, err: (err as Error).message });
-    }
-    return null;
-  }
+  const [scan, outcome] = await redis().mget<[StoredScan | null, StoredOutcome | null]>(
+    scanKey(id), outcomeKey(id),
+  );
+  if (!scan || typeof scan.createdAt !== 'number' || !scan.result) return null;
+  return outcome ? { ...scan, ...outcome } : scan;
 }
 
 export async function recordOutcome(
@@ -147,13 +56,11 @@ export async function recordOutcome(
   if (!scan) return { conflict: false, stored: null };
   if (scan.outcome) return { conflict: true, stored: scan };
 
-  const updated: StoredScan = { ...scan, outcome: action, outcomeAt: Date.now() };
-  scans.set(id, updated);
-
-  // Best-effort disk write — outcome loss on restart is acceptable (ephemeral store)
-  writeFile(scanFilePath(id), JSON.stringify(updated), 'utf8').catch((err) => {
-    log.warn('Failed to persist outcome to disk', { id, err: (err as Error).message });
-  });
-
-  return { conflict: false, stored: updated };
+  const outcome: StoredOutcome = { outcome: action, outcomeAt: Date.now() };
+  const written = await redis().set(outcomeKey(id), outcome, { px: SCAN_TTL_MS, nx: true });
+  if (written === null) {
+    // Lost the race to a concurrent request — report what actually got stored.
+    return { conflict: true, stored: await getScanById(id) };
+  }
+  return { conflict: false, stored: { ...scan, ...outcome } };
 }

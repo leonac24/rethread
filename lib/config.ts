@@ -4,7 +4,6 @@
 // ─── Rate limiting ─────────────────────────────────────────────────────────
 export const RATE_LIMIT = 5;           // max requests per window per IP
 export const RATE_WINDOW_MS = 60_000;  // 1 minute
-export const MAX_TRACKED_IPS = 10_000;
 
 // ─── File uploads ──────────────────────────────────────────────────────────
 export const MAX_UPLOAD_FILES = 5;

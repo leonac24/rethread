@@ -1,39 +1,29 @@
 // Shared IP-based rate limiter — imported by every API route that needs limiting.
-// Using a single module-level Map means all routes share the same window state
-// within a process rather than each route tracking IPs independently.
+// State lives in Redis so the window holds across serverless instances and cold starts.
 
-import { RATE_LIMIT, RATE_WINDOW_MS, MAX_TRACKED_IPS } from '@/lib/config';
+import { RATE_LIMIT, RATE_WINDOW_MS } from '@/lib/config';
+import { redis } from '@/lib/redis';
+import { log } from '@/lib/logger';
 
-const ipHits = new Map<string, { count: number; resetAt: number }>();
+// Fixed window: INCR and set the expiry atomically so a key can never be left without a TTL.
+const HIT_SCRIPT = `
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
+return {count, redis.call('PTTL', KEYS[1])}
+`;
 
-export function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-
-  // Evict all expired entries if the Map is at capacity
-  if (ipHits.size >= MAX_TRACKED_IPS) {
-    for (const [key, entry] of ipHits) {
-      if (now > entry.resetAt) ipHits.delete(key);
-    }
-  }
-
-  const entry = ipHits.get(ip);
-  if (!entry || now > entry.resetAt) {
-    const resetAt = now + RATE_WINDOW_MS;
-    ipHits.set(ip, { count: 1, resetAt });
-    // Auto-evict this entry once the window expires
-    setTimeout(() => {
-      const current = ipHits.get(ip);
-      if (current?.resetAt === resetAt) ipHits.delete(ip);
-    }, RATE_WINDOW_MS);
+export async function checkRateLimit(ip: string): Promise<{ allowed: boolean; retryAfter?: number }> {
+  try {
+    const [count, ttlMs] = await redis().eval<[number], [number, number]>(
+      HIT_SCRIPT, [`rl:${ip}`], [RATE_WINDOW_MS],
+    );
+    if (count <= RATE_LIMIT) return { allowed: true };
+    return { allowed: false, retryAfter: Math.max(1, Math.ceil(ttlMs / 1000)) };
+  } catch (err) {
+    // Fail open: a Redis outage should not take every API route down with it.
+    log.warn('Rate limit check failed, allowing request', { err: (err as Error).message });
     return { allowed: true };
   }
-
-  if (entry.count >= RATE_LIMIT) {
-    return { allowed: false, retryAfter: Math.ceil((entry.resetAt - now) / 1000) };
-  }
-
-  entry.count++;
-  return { allowed: true };
 }
 
 export function getClientIp(request: Request): string {

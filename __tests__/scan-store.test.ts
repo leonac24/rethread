@@ -1,5 +1,6 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { ScanResult } from '../types/garment';
+import { createFakeRedis } from './helpers/fake-redis';
 
 // ─── Stub transitive @/ dependencies before importing scan-store ──────────────
 const mockLog = { info: mock(() => {}), warn: mock(() => {}), error: mock(() => {}) };
@@ -9,27 +10,15 @@ mock.module('../lib/config', () => ({
   MAX_SCAN_BYTES: 1_000_000,
   RATE_LIMIT: 5,
   RATE_WINDOW_MS: 60_000,
-  MAX_TRACKED_IPS: 10_000,
   MAX_UPLOAD_FILES: 5,
   MAX_FILE_BYTES: 10 * 1024 * 1024,
   BRAND_CACHE_TTL_MS: 60 * 60 * 1000,
   GEMINI_TIMEOUT_MS: 20_000,
-  BIGQUERY_TIMEOUT_MS: 10_000,
   SHIPPO_TIMEOUT_MS: 20_000,
 }));
 
-// Stub fs/promises so tests don't hit the real filesystem
-const mockWriteFile = mock(async () => {});
-const mockReadFile = mock(async (_path: string) => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); });
-const mockUnlink = mock(async () => {});
-const mockMkdir = mock(async () => {});
-
-mock.module('node:fs/promises', () => ({
-  writeFile: mockWriteFile,
-  readFile: mockReadFile,
-  unlink: mockUnlink,
-  mkdir: mockMkdir,
-}));
+const fake = createFakeRedis();
+mock.module('../lib/redis', () => ({ redis: () => fake }));
 
 const { saveScanResult, getScanById, recordOutcome } = await import('../lib/scan-store');
 
@@ -102,27 +91,17 @@ describe('saveScanResult + getScanById', () => {
     expect(retrieved!.result.cost.disposal_note).toBe('Cotton takes ~20 years to decompose in landfill.');
   });
 
-  it('writes to disk via writeFile', async () => {
-    mockWriteFile.mockClear();
+  it('stores with the scan TTL', async () => {
     const result = makeScanResult();
     await saveScanResult('', result);
-    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    const expiresAt = fake.store.get(`scan:${result.id}`)!.expiresAt!;
+    expect(expiresAt - Date.now()).toBeGreaterThan(29 * 60 * 1000);
   });
 
-  it('falls back to disk (mockReadFile) for a cache-miss scenario', async () => {
-    // getScanById on a UUID not in the in-memory map will attempt disk read
-    // our mockReadFile throws ENOENT, so it returns null
-    const missId = crypto.randomUUID();
-    const result = await getScanById(missId);
-    expect(result).toBeNull();
-  });
-
-  it('discards corrupt disk content (shape validation)', async () => {
-    const corruptId = crypto.randomUUID();
-    mockReadFile.mockImplementationOnce(async () => JSON.stringify({ garbage: true }));
-    const result = await getScanById(corruptId);
-    expect(result).toBeNull();
-    expect(mockUnlink).toHaveBeenCalled();
+  it('discards malformed stored content (shape validation)', async () => {
+    const id = crypto.randomUUID();
+    await fake.set(`scan:${id}`, { garbage: true });
+    expect(await getScanById(id)).toBeNull();
   });
 });
 
@@ -172,6 +151,15 @@ describe('recordOutcome', () => {
       const { stored } = await recordOutcome(id, action);
       expect(stored!.outcome).toBe(action);
     }
+  });
+
+  it('first writer wins when two outcomes race', async () => {
+    const result = makeScanResult();
+    const id = await saveScanResult('', result);
+
+    const [a, b] = await Promise.all([recordOutcome(id, 'repair'), recordOutcome(id, 'donate')]);
+    expect([a.conflict, b.conflict].sort()).toEqual([false, true]);
+    expect(a.stored!.outcome).toBe(b.stored!.outcome);
   });
 
   it('throws on invalid UUID', async () => {

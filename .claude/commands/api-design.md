@@ -25,5 +25,4 @@ This project's current API surface:
 - `GET /api/scan/:id` — returns stored scan result
 - `GET /api/health` — liveness probe
 - `GET /api/test-routes` — dev only
-- `POST /api/test-scan` — dev only
 Error shape is `{ error: string }`. Trace ID returned as `X-Trace-Id` header.
